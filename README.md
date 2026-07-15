@@ -1,0 +1,100 @@
+# Astro World
+
+A Vedic astrology suite built with **Next.js 15** and a **Python** calculation engine
+(Swiss Ephemeris). It casts birth charts and runs modules for Muhurta (electional
+astrology), Yogas & Doshas analysis with strength scoring and remedies, dashas, and more.
+
+## Requirements
+
+- **Node.js** 18+ (LTS recommended)
+- **Python** 3.10+
+- Package manager: `npm` or `yarn` (this repo pins `yarn@1.22.22` via `packageManager`)
+
+## Setup
+
+### 1. Install JavaScript dependencies
+
+```bash
+npm install
+# or
+yarn install
+```
+
+### 2. Set up the Python engine
+
+```bash
+cd python_engine
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+```
+
+Python dependencies:
+
+- `pyswisseph` — Swiss Ephemeris bindings (planetary calculations)
+- `pytz` — timezone handling
+
+Ephemeris data files ship in the [`ephe/`](ephe/) folder, so no extra download is needed.
+
+## Running the app (development)
+
+The Next.js API spawns Python for calculations. Point it at the interpreter that has
+the dependencies installed using the `ASTRO_WORLD_PYTHON` environment variable
+(falls back to `SIDDHANTA_PYTHON`, then the system `python3` / `python`):
+
+```bash
+# use the venv you created above
+export ASTRO_WORLD_PYTHON="$(pwd)/python_engine/.venv/bin/python"   # Windows: set ASTRO_WORLD_PYTHON=...\python_engine\.venv\Scripts\python.exe
+
+npm run dev
+```
+
+Open http://localhost:3000.
+
+If `ASTRO_WORLD_PYTHON` is unset, the app uses `python3` (macOS/Linux) or `python`
+(Windows) from your `PATH` — make sure `pyswisseph` and `pytz` are installed there.
+
+## Production build
+
+```bash
+npm run build
+npm run start
+```
+
+## Windows packaging
+
+A self-contained Windows package (bundled Node.js, Python, and ephemeris) can be built with:
+
+```bash
+npm run build:windows
+```
+
+See [`packaging/windows/README-WINDOWS.txt`](packaging/windows/README-WINDOWS.txt) for
+install options (one-click installer `.exe`, `Setup.bat`, and portable mode).
+
+## Project structure
+
+```
+app/                 Next.js app router pages & API routes
+  api/[[...path]]/   API layer that proxies requests to the Python engine
+  yoga-dosha/        Yogas & Doshas module UI
+components/          Shared React components (AppShell, module shortcuts, UI kit)
+lib/                 Client-side utilities (chart helpers, print/report builders)
+python_engine/       Swiss Ephemeris calculation engine + analysis modules
+  calculate.py               Core chart calculation
+  yoga_dosha_analysis.py     Yoga/dosha detection, strength scoring, dasha activation
+  remedy_catalog.py          Cited remedies catalog
+  muhurta_engine.py          Electional astrology
+  run_*.py                   Entry points invoked by the API
+ephe/                Swiss Ephemeris data files
+public/modules/      Embedded module assets
+packaging/windows/   Windows build scripts and installer config
+```
+
+## Notes
+
+- No secrets are committed. Configure any environment-specific values via environment
+  variables (e.g. `ASTRO_WORLD_PYTHON`), not source files.
+- Generated/downloaded folders (`node_modules/`, `.next/`, `dist/`) are not tracked;
+  they are recreated by `npm install` and the build steps above.
