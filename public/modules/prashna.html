@@ -4855,6 +4855,10 @@
           v.value.question = q;
           v.value.questionText = q.text;
         }
+        // If custom text is present but no formal question, use it as questionText
+        if (!v.value.questionText && v.value.customText) {
+          v.value.questionText = v.value.customText;
+        }
         const out = ui.runAnalysis(v.value);
         const html = out.answer
           ? ui.buildAnswerHtml(v.value, out.chart, out.answer)
@@ -4995,6 +4999,8 @@
 
     // Default the manual date/time to "now" for convenience (editable).
     prefillNow('manual');
+    // Auto-detect location for Manual tab too (editable by user).
+    requestLocationFor('manual');
     prefillNow('mooka');
 
     // Tab switching.
