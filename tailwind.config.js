@@ -18,6 +18,21 @@ module.exports = {
       },
       extend: {
         colors: {
+          // Brand accent — deep saffron / marigold (Vedic warm tones).
+          // Standardized palette reused across banner, nav, CTAs, badges & links.
+          saffron: {
+            50: '#fff8ed',
+            100: '#ffedcf',
+            200: '#fdd8a0',
+            300: '#fbc25f',
+            400: '#ff9933',
+            500: '#f5850e',
+            600: '#d9700a',
+            700: '#b45a09',
+            800: '#8f470b',
+            900: '#743a0c',
+            DEFAULT: '#ff9933',
+          },
           border: 'hsl(var(--border))',
           input: 'hsl(var(--input))',
           ring: 'hsl(var(--ring))',

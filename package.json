@@ -8,6 +8,7 @@
         "dev:webpack": "next dev --hostname 0.0.0.0 --port 3000",
         "build": "next build",
         "start": "next start",
+        "start:standalone": "node scripts/start-standalone.js",
         "build:windows": "bash packaging/windows/build-release.sh"
     },
     "dependencies": {
