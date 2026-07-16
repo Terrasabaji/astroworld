@@ -1,0 +1,1122 @@
+/*
+ * app.js -- UI wiring for the Astrological Health Screener.
+ * Depends on (loaded first): AHS.ephemeris, AHS.core, AHS.data, AHS.parashara, AHS.kp
+ */
+(function () {
+  "use strict";
+
+  var core = window.AHS.core;
+  var data = window.AHS.data;
+  var parashara = window.AHS.parashara;
+  var kp = window.AHS.kp;
+  var varga = window.AHS.varga;
+  var dasha = window.AHS.dasha;
+  var predict = window.AHS.predict;
+  var d6engine = window.AHS.d6;
+  var qa = window.AHS.qa;
+  var topics = window.AHS.topics;
+  var kpdasha = window.AHS.kpdasha;
+  var shadbala = window.AHS.shadbala;
+  var neecha = window.AHS.neecha;
+  var accident = window.AHS.accident;
+  var healthTimeline = window.AHS.healthTimeline;
+  var timelineCtx = null, timelineYears = 20;
+
+  var qaContext = null; // populated after a screening is generated
+  var logoDataUrl = null; // letterhead logo, read client-side
+
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+  function fmtDeg(d) {
+    var deg = Math.floor(d);
+    var m = Math.round((d - deg) * 60);
+    if (m === 60) { deg += 1; m = 0; }
+    return deg + "\u00b0" + (m < 10 ? "0" : "") + m + "'";
+  }
+
+  /* ----------------- City geocoding (Open-Meteo, no key) ----------------- */
+  function searchCity() {
+    var q = $("city").value.trim();
+    var list = $("city-results");
+    if (!q) return;
+    list.hidden = false;
+    list.innerHTML = "<li>Searching\u2026</li>";
+    fetch("https://geocoding-api.open-meteo.com/v1/search?count=8&language=en&format=json&name=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        list.innerHTML = "";
+        if (!j.results || !j.results.length) {
+          list.innerHTML = "<li>No matches. Enter latitude/longitude manually.</li>";
+          return;
+        }
+        j.results.forEach(function (place) {
+          var label = [place.name, place.admin1, place.country].filter(Boolean).join(", ");
+          var li = el("li", null, label + " <span class='hint'>(" + place.latitude.toFixed(2) + ", " + place.longitude.toFixed(2) + ")</span>");
+          li.addEventListener("click", function () { selectPlace(place, label); list.hidden = true; });
+          list.appendChild(li);
+        });
+      })
+      .catch(function () {
+        list.innerHTML = "<li>Lookup failed (offline?). Enter latitude/longitude manually.</li>";
+      });
+  }
+
+  function selectPlace(place, label) {
+    $("lat").value = place.latitude.toFixed(6);
+    $("lon").value = place.longitude.toFixed(6);
+    var tz = guessOffsetForZone(place.timezone, getDateFromForm());
+    if (tz !== null) $("tz").value = tz;
+    $("place-resolved").textContent = "Selected: " + label +
+      (place.timezone ? " \u00b7 " + place.timezone : "") +
+      (tz !== null ? " (UTC" + (tz >= 0 ? "+" : "") + tz + ")" : "");
+  }
+
+  // Estimate a zone's UTC offset (hours) for a given local date using Intl.
+  function guessOffsetForZone(timeZone, date) {
+    if (!timeZone || typeof Intl === "undefined") return null;
+    try {
+      var dtf = new Intl.DateTimeFormat("en-US", { timeZone: timeZone, timeZoneName: "longOffset" });
+      var parts = dtf.formatToParts(date || new Date());
+      var name = parts.find(function (p) { return p.type === "timeZoneName"; });
+      if (!name) return null;
+      var m = name.value.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+      if (!m) return 0;
+      var sign = m[1] === "-" ? -1 : 1;
+      var h = parseInt(m[2], 10);
+      var min = m[3] ? parseInt(m[3], 10) : 0;
+      return sign * (h + min / 60);
+    } catch (e) { return null; }
+  }
+
+  function getDateFromForm() {
+    var dob = $("dob").value;
+    if (!dob) return new Date();
+    var parts = dob.split("-");
+    return new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2], 12, 0, 0));
+  }
+
+  /* ----------------- Chart building ----------------- */
+  function parseForm() {
+    var dob = $("dob").value;
+    var tob = $("unknown-time").checked ? "12:00" : $("tob").value;
+    if (!dob || !tob) throw new Error("Please enter date and time of birth.");
+    var dp = dob.split("-").map(Number);
+    var tp = tob.split(":").map(Number);
+    var lat = parseFloat($("lat").value);
+    var lon = parseFloat($("lon").value);
+    var tz = parseFloat($("tz").value);
+    if (isNaN(lat) || isNaN(lon)) throw new Error("Please enter a valid latitude and longitude (or pick a city).");
+    if (isNaN(tz)) throw new Error("Please enter the UTC offset in hours (e.g. 5.5 for India).");
+    return {
+      name: $("name").value.trim(),
+      y: dp[0], mo: dp[1], d: dp[2], h: tp[0], mi: tp[1],
+      lat: lat, lon: lon, tz: tz,
+      unknownTime: $("unknown-time").checked
+    };
+  }
+
+  function buildNatal(f) {
+    var jd = core.julianDayLocal(f.y, f.mo, f.d, f.h, f.mi, f.tz);
+    return core.buildChart({ jd: jd, latDeg: f.lat, lonEast: f.lon });
+  }
+
+  function buildTransit(natal) {
+    // Current moment, same location (location only matters for transit ascendant; we
+    // report planetary transits and their gochara through natal whole-sign houses).
+    var now = new Date();
+    var jd = core.julianDayUT(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(),
+      now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
+    var d = jd - 2451543.5;
+    var ayan = core.lahiriAyanamsa(jd);
+    var eph = window.AHS.ephemeris;
+    var trop = eph.tropicalLongitudes(d);
+    var out = {};
+    core.BODIES.forEach(function (p) {
+      out[p] = core.describe(core.toSidereal(trop[p], ayan));
+    });
+    return { when: now, planets: out, lagnaSignIndex: natal.lagnaSignIndex };
+  }
+
+  /* ----------------- Rendering ----------------- */
+  function dignityBadge(planet, signIndex) {
+    var dg = parashara.dignityOf(planet, signIndex);
+    var cls = dg === "exalted" ? "exalted" : dg === "debilitated" ? "debilitated" :
+      dg === "own sign" ? "own" : "neutral";
+    return "<span class='badge " + cls + "'>" + dg + "</span>";
+  }
+
+  var BODY_ABBR = { Sun: "Su", Moon: "Mo", Mars: "Ma", Mercury: "Me", Jupiter: "Ju", Venus: "Ve", Saturn: "Sa", Rahu: "Ra", Ketu: "Ke" };
+  // South Indian fixed sign positions [gridRow, gridColumn] (1-indexed), signs 0..11
+  var SIC_POS = [[1, 2], [1, 3], [1, 4], [2, 4], [3, 4], [4, 4], [4, 3], [4, 2], [4, 1], [3, 1], [2, 1], [1, 1]];
+  var chartFormat = "south";
+  var lastCharts = null; // {natal, d9, d3, d6}
+
+  // Unified chart data: by sign (South Indian) and by house (North Indian).
+  function chartData(asc, planetsObj) {
+    var lagna = asc.signIndex;
+    var bySign = []; for (var i = 0; i < 12; i++) bySign.push([]);
+    var byHouse = {}; for (var h = 1; h <= 12; h++) byHouse[h] = { signNum: ((lagna + h - 1) % 12) + 1, items: [] };
+    function add(signIndex, abbr, d) {
+      var hh = ((signIndex - lagna + 12) % 12) + 1;
+      var item = { abbr: abbr, deg: Math.floor(d) };
+      bySign[signIndex].push(item); byHouse[hh].items.push(item);
+    }
+    add(lagna, "As", asc.degInSign);
+    core.BODIES.forEach(function (p) { add(planetsObj[p].signIndex, BODY_ABBR[p], planetsObj[p].degInSign); });
+    return { lagnaSign: lagna, bySign: bySign, byHouse: byHouse };
+  }
+
+  function southIndianChart(title, cd) {
+    var wrap = el("div", "south-chart-wrap");
+    wrap.appendChild(el("div", "south-chart-title", title));
+    var grid = el("div", "south-chart");
+    for (var s = 0; s < 12; s++) {
+      var cell = el("div", "sic-cell" + (s === cd.lagnaSign ? " lagna" : ""));
+      cell.style.gridRow = String(SIC_POS[s][0]);
+      cell.style.gridColumn = String(SIC_POS[s][1]);
+      var bodies = cd.bySign[s].map(function (it) {
+        return it.abbr + " <span class='sic-deg'>" + it.deg + "&deg;</span>";
+      }).join("<br>");
+      cell.innerHTML = "<span class='sic-sign'>" + core.SIGNS[s].slice(0, 3) + "</span>" +
+        "<span class='sic-bodies'>" + bodies + "</span>";
+      grid.appendChild(cell);
+    }
+    var center = el("div", "sic-center", title);
+    grid.appendChild(center);
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  // North Indian (diamond) chart as inline SVG.
+  var NIC_CENTROID = {
+    1: [50, 27], 2: [25, 12], 3: [12, 25], 4: [27, 50], 5: [12, 75], 6: [25, 88],
+    7: [50, 73], 8: [75, 88], 9: [88, 75], 10: [73, 50], 11: [88, 25], 12: [75, 12]
+  };
+  function northIndianChart(title, cd) {
+    var wrap = el("div", "north-chart-wrap");
+    wrap.appendChild(el("div", "south-chart-title", title));
+    var COL = "#e0a83c";
+    var svg = "<svg viewBox='0 0 100 100' class='north-chart'>";
+    svg += "<rect x='1' y='1' width='98' height='98' fill='none' stroke='" + COL + "' stroke-width='0.8'/>";
+    svg += "<line x1='1' y1='1' x2='99' y2='99' stroke='" + COL + "' stroke-width='0.5'/>";
+    svg += "<line x1='99' y1='1' x2='1' y2='99' stroke='" + COL + "' stroke-width='0.5'/>";
+    svg += "<polygon points='50,1 99,50 50,99 1,50' fill='none' stroke='" + COL + "' stroke-width='0.5'/>";
+    for (var h = 1; h <= 12; h++) {
+      var c = NIC_CENTROID[h], sd = cd.byHouse[h];
+      var n = sd.items.length;
+      svg += "<text x='" + c[0] + "' y='" + (c[1] - n * 2.2) + "' text-anchor='middle' font-size='4.4' fill='#e9ecf8'>";
+      svg += "<tspan x='" + c[0] + "' font-size='3.4' fill='#7c83f7'>" + sd.signNum + "</tspan>";
+      sd.items.forEach(function (it) {
+        svg += "<tspan x='" + c[0] + "' dy='4.6'>" + it.abbr + " " + it.deg + "&#176;</tspan>";
+      });
+      svg += "</text>";
+    }
+    svg += "</svg>";
+    var box = el("div"); box.innerHTML = svg;
+    wrap.appendChild(box.firstChild);
+    return wrap;
+  }
+
+  function buildAllCharts() {
+    if (!lastCharts) return;
+    var grid = $("charts-grid");
+    grid.innerHTML = "";
+    var maker = chartFormat === "north" ? northIndianChart : southIndianChart;
+    var n = lastCharts.natal;
+    grid.appendChild(maker("D1 Rasi", chartData({ signIndex: n.ascendant.signIndex, degInSign: n.ascendant.degInSign }, n.planets)));
+    grid.appendChild(maker("D9 Navamsa", chartData({ signIndex: lastCharts.d9.lagnaSignIndex, degInSign: lastCharts.d9.lagnaDeg }, lastCharts.d9.planets)));
+    grid.appendChild(maker("D3 Drekkana", chartData({ signIndex: lastCharts.d3.lagnaSignIndex, degInSign: lastCharts.d3.lagnaDeg }, lastCharts.d3.planets)));
+    grid.appendChild(maker("D6 Shashthamsa", chartData({ signIndex: lastCharts.d6.lagnaSignIndex, degInSign: lastCharts.d6.lagnaDeg }, lastCharts.d6.planets)));
+  }
+
+  function renderCharts(natal, d9, d3, d6) {
+    lastCharts = { natal: natal, d9: d9, d3: d3, d6: d6 };
+    buildAllCharts();
+  }
+
+  function setChartFormat(fmt) {
+    chartFormat = fmt;
+    var sBtn = $("fmt-south"), nBtn = $("fmt-north");
+    if (sBtn && nBtn) { sBtn.classList.toggle("active", fmt === "south"); nBtn.classList.toggle("active", fmt === "north"); }
+    buildAllCharts();
+  }
+
+  function renderNeecha(results) {
+    var c = $("neecha-out");
+    c.innerHTML = "<h3>Debilitation &amp; Neecha Bhanga (cancellation)</h3>";
+    if (!results.length) {
+      c.appendChild(el("p", "hint", "No planet is debilitated in the D1 Rasi chart."));
+      return;
+    }
+    results.forEach(function (r) {
+      var div = el("div", "finding " + (r.cancelled ? "low" : "moderate"));
+      div.appendChild(el("h4", null, r.planet + " debilitated in " + r.debilSign +
+        " <span class='sev-tag " + (r.cancelled ? "low" : "high") + "'>" +
+        (r.cancelled ? "cancelled" : "not cancelled") + "</span>"));
+      if (r.navamsaSign) {
+        div.appendChild(el("p", "hint", "Navamsa (D9): " + r.navamsaSign +
+          (r.navamsaDignity && r.navamsaDignity !== "neutral" && r.navamsaDignity !== "n/a" ? " (" + r.navamsaDignity + ")" : "")));
+      }
+      if (r.cancelled) {
+        var ul = el("ul");
+        r.reasons.forEach(function (x) { ul.appendChild(el("li", null, x)); });
+        div.appendChild(el("p", null, "Neecha Bhanga applies &mdash; the debility is largely neutralised (and can act as a strength):"));
+        div.appendChild(ul);
+      } else {
+        div.appendChild(el("p", null, "No cancellation found. The organs/functions governed by " + r.planet +
+          " may lack vitality and need extra care."));
+        var bp = el("div", "bodyparts");
+        bp.appendChild(el("span", null, "<strong>Areas to watch:</strong> "));
+        r.bodyParts.forEach(function (b) { bp.appendChild(el("span", "chip", b)); });
+        div.appendChild(bp);
+      }
+      c.appendChild(div);
+    });
+  }
+
+  function renderNativeDetails(f) {
+    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    $("nd-name").textContent = f.name || "(not provided)";
+    $("nd-dob").textContent = f.d + " " + months[f.mo - 1] + " " + f.y;
+    $("nd-tob").textContent = f.unknownTime
+      ? "Not known (12:00 assumed)"
+      : pad(f.h) + ":" + pad(f.mi) + " (local)";
+    var city = ($("city").value || "").trim();
+    var tzStr = "UTC" + (f.tz >= 0 ? "+" : "") + f.tz;
+    var coords = Math.abs(f.lat).toFixed(6) + "\u00b0" + (f.lat >= 0 ? "N" : "S") + ", " +
+      Math.abs(f.lon).toFixed(6) + "\u00b0" + (f.lon >= 0 ? "E" : "W");
+    $("nd-place").textContent = (city ? city + " \u2014 " : "") + coords + " (" + tzStr + ")";
+  }
+
+  function strengthCell(sb, p) {
+    if (!sb || !sb.planets[p]) return "&mdash;";
+    var s = sb.planets[p];
+    var klass = s.status === "strong" ? "low" : s.status === "moderate" ? "moderate" : "high";
+    var flags = (s.retrograde ? " \u211e" : "") + (s.combust ? " \u2609" : "");
+    return "<span class='sev-tag " + klass + "'>" + s.rupas + "</span>" + flags;
+  }
+
+  function renderNatalTable(chart, f, sb) {
+    var tbody = $("natal-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    // Ascendant row
+    if (!f.unknownTime) {
+      var a = chart.ascendant;
+      var ar = el("tr", null,
+        "<td><strong>Ascendant</strong></td><td>" + a.sign + "</td><td>" + fmtDeg(a.degInSign) +
+        "</td><td>" + a.nakshatra + "</td><td>" + a.pada + "</td><td>" + a.subLord +
+        "</td><td>1</td><td>1</td><td>&mdash;</td><td>&mdash;</td>");
+      tbody.appendChild(ar);
+    }
+    core.BODIES.forEach(function (p) {
+      var d = chart.planets[p];
+      var tr = el("tr", null,
+        "<td>" + p + "</td><td>" + d.sign + "</td><td>" + fmtDeg(d.degInSign) +
+        "</td><td>" + d.nakshatra + "</td><td>" + d.pada + "</td><td>" + d.subLord +
+        "</td><td>" + (f.unknownTime ? "&mdash;" : d.placidusHouse) +
+        "</td><td>" + (f.unknownTime ? "&mdash;" : d.wholeSignHouse) +
+        "</td><td>" + dignityBadge(p, d.signIndex) +
+        "</td><td>" + strengthCell(sb, p) + "</td>");
+      tbody.appendChild(tr);
+    });
+    $("chart-asc").textContent = f.unknownTime ? "(birth time unknown \u2014 houses omitted)" :
+      "Ascendant: " + chart.ascendant.sign + " " + fmtDeg(chart.ascendant.degInSign);
+  }
+
+  function renderTransits(transit, natal, f) {
+    var tbody = $("transit-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    var flags = [];
+    core.BODIES.forEach(function (p) {
+      var d = transit.planets[p];
+      var gh = core.wholeSignHouse(d.signIndex, natal.lagnaSignIndex);
+      var rowCls = ([6, 8, 12].indexOf(gh) >= 0) ? "style='color:var(--amber)'" : "";
+      var tr = el("tr", null,
+        "<td " + rowCls + ">" + p + "</td><td>" + d.sign + "</td><td>" + fmtDeg(d.degInSign) +
+        "</td><td>" + d.nakshatra + "</td><td>" + d.subLord + "</td><td>" + gh + "</td>");
+      tbody.appendChild(tr);
+      if (["Saturn", "Rahu", "Ketu", "Mars"].indexOf(p) >= 0 && [6, 8, 12, 1].indexOf(gh) >= 0) {
+        flags.push(p + " is transiting your natal house " + gh +
+          (gh === 1 ? " (Ascendant/body)" : " (a health-sensitive house)") + ".");
+      }
+      // transit over natal Moon sign (Sade Sati style note for Saturn)
+      if (p === "Saturn") {
+        var moonSign = natal.planets.Moon.signIndex;
+        var diff = ((d.signIndex - moonSign + 12) % 12);
+        if (diff === 11 || diff === 0 || diff === 1) {
+          flags.push("Saturn is transiting around your natal Moon sign (Sade Sati phase) \u2014 a classically demanding period for stamina and stress.");
+        }
+      }
+    });
+    $("transit-time").textContent = "as of " + transit.when.toLocaleString();
+    var fc = $("transit-flags");
+    fc.innerHTML = flags.length ? "<h4>Transit highlights</h4>" : "";
+    flags.forEach(function (t) { fc.appendChild(el("span", "flag", t)); });
+  }
+
+  function renderFinding(f) {
+    var div = el("div", "finding " + f.severity);
+    div.appendChild(el("h4", null, f.area + " <span class='sev-tag " + f.severity + "'>" + f.severity + "</span>"));
+    div.appendChild(el("p", null, f.basis));
+    if (f.bodyParts && f.bodyParts.length) {
+      var bp = el("div", "bodyparts");
+      bp.appendChild(el("span", null, "<strong>Areas indicated:</strong> "));
+      f.bodyParts.forEach(function (b) { bp.appendChild(el("span", "chip", b)); });
+      div.appendChild(bp);
+    }
+    return div;
+  }
+
+  function renderParashara(r) {
+    var c = $("parashara-out");
+    c.innerHTML = "<h3>Parashara Health Analysis</h3>";
+    c.appendChild(el("div", "summary-box", r.summary));
+    if (r.findings.length) {
+      c.appendChild(el("h4", null, "Areas to monitor"));
+      r.findings.forEach(function (f) { c.appendChild(renderFinding(f)); });
+    }
+    if (r.supportive.length) {
+      var sup = el("div", "finding supportive");
+      sup.appendChild(el("h4", null, "Supportive factors"));
+      var ul = el("ul");
+      r.supportive.forEach(function (s) { ul.appendChild(el("li", null, s)); });
+      sup.appendChild(ul);
+      c.appendChild(sup);
+    }
+  }
+
+  function renderKP(r) {
+    var c = $("kp-out");
+    c.innerHTML = "<h3>KP (Krishnamurti Paddhati) Health Analysis</h3>";
+    c.appendChild(el("div", "summary-box", r.summary));
+
+    c.appendChild(el("h4", null, "Cuspal sub-lord verdicts"));
+    r.cuspReports.forEach(function (cr) {
+      var div = el("div", "finding " + cr.severity);
+      div.appendChild(el("h4", null, cr.label + " <span class='sev-tag " + cr.severity + "'>" + cr.severity + "</span>"));
+      div.appendChild(el("p", null, "Sub-lord: <strong>" + cr.subLord + "</strong> &middot; signifies houses [" +
+        cr.signifies.join(", ") + "]<br>" + cr.verdict + "."));
+      c.appendChild(div);
+    });
+
+    if (r.findings.length) {
+      c.appendChild(el("h4", null, "Significators of disease houses (6 / 8 / 12)"));
+      r.findings.forEach(function (f) { c.appendChild(renderFinding(f)); });
+    }
+  }
+
+  /* ----------------- Orchestration ----------------- */
+  function renderDasha(dz) {
+    var tbody = $("dasha-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    var rows = [
+      ["Maha Dasha", dz.md],
+      ["Antar Dasha", dz.ad],
+      ["Pratyantar Dasha", dz.pd]
+    ];
+    rows.forEach(function (r) {
+      tbody.appendChild(el("tr", null,
+        "<td>" + r[0] + "</td><td><strong>" + r[1].lord + "</strong></td><td>" +
+        dasha.fmtDate(r[1].startMs) + "</td><td>" + dasha.fmtDate(r[1].endMs) + "</td>"));
+    });
+    $("dasha-meta").textContent = "Birth star " + dz.startNakshatra + " (" + dz.startLord +
+      "), balance " + dz.balanceYears.toFixed(2) + " yrs at birth";
+  }
+
+  function renderDivisional(natal, d22, n64, f) {
+    var m = $("maraka-out");
+    m.innerHTML = "";
+    m.appendChild(el("p", null,
+      "<strong>22nd Drekkana lord (from Lagna):</strong> " +
+      (f.unknownTime ? "<span class='hint'>needs birth time</span>" :
+        "<span class='period-pill'>" + d22.lord + "</span> &mdash; in " + core.SIGNS[d22.drekkanaSignIndex] +
+        " (8th-sign Drekkana, " + core.SIGNS[d22.rasiIndex] + "). A classical cause-of-affliction (Khara) point.")));
+    m.appendChild(el("p", null,
+      "<strong>64th Navamsa lord (from Moon):</strong> <span class='period-pill'>" + n64.lord +
+      "</span> &mdash; navamsa sign " + core.SIGNS[n64.navamsaSignIndex] +
+      ". Another Khara/maraka point governing vulnerable areas."));
+
+    var d3 = varga.buildD3(natal);
+    $("d3-asc").textContent = "D3 Lagna: " + d3.lagnaSign + (f.unknownTime ? " (approx \u2014 time unknown)" : "");
+    var tbody = $("d3-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    core.BODIES.forEach(function (p) {
+      tbody.appendChild(el("tr", null,
+        "<td>" + p + "</td><td>" + d3.planets[p].sign + "</td><td>" +
+        (f.unknownTime ? "&mdash;" : d3.planets[p].house) + "</td>"));
+    });
+  }
+
+  function renderShadbala(sb, health) {
+    var tbody = $("shadbala-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    var statusClass = { strong: "low", moderate: "moderate", weak: "high" };
+    shadbala.PLANETS.forEach(function (p) {
+      var s = sb.planets[p], c = s.components;
+      var motion = s.motion + (s.retrograde ? " \u211e" : "") + (s.combust ? ", combust" : "");
+      var motionStyle = (s.retrograde || s.combust) ? " style='color:var(--red)'" : (s.motion === "slow" ? " style='color:var(--amber)'" : "");
+      tbody.appendChild(el("tr", null,
+        "<td><strong>" + p + "</strong></td>" +
+        "<td>" + c.sthana + "</td><td>" + c.dig + "</td><td>" + c.kala + "</td><td>" + c.cheshta +
+        "</td><td>" + c.naisargika + "</td><td>" + c.drik + "</td>" +
+        "<td><strong>" + s.rupas + "</strong></td><td>" + s.required + "</td>" +
+        "<td><span class='sev-tag " + statusClass[s.status] + "'>" + s.status + "</span></td>" +
+        "<td>" + s.speed + "</td><td" + motionStyle + ">" + motion + "</td><td>" + s.declination + "&deg;</td>"));
+    });
+    var c2 = $("shadbala-out");
+    c2.innerHTML = "<h3>Shadbala Health Interpretation</h3>";
+    c2.appendChild(el("div", "summary-box", health.summary));
+    if (health.findings.length) {
+      health.findings.forEach(function (f) { c2.appendChild(renderFinding(f)); });
+    } else {
+      c2.appendChild(el("p", "hint", "No planet is critically weak, combust or retrograde \u2014 functional strength is broadly adequate."));
+    }
+  }
+
+  function renderAccident(r) {
+    var c = $("accident-out");
+    c.innerHTML = "<h3>Accident &amp; Injury Risk <span class='sev-tag " + r.levelClass + "'>" + r.level + "</span></h3>";
+    c.appendChild(el("div", "summary-box", r.summary));
+    if (r.factors.length) {
+      c.appendChild(el("h4", null, "Contributing factors (promise)"));
+      var ul = el("ul");
+      r.factors.forEach(function (f) { ul.appendChild(el("li", null, f)); });
+      c.appendChild(ul);
+    }
+    if (r.bodyParts.length) {
+      var bp = el("div", "bodyparts");
+      bp.appendChild(el("span", null, "<strong>Areas most at risk:</strong> "));
+      r.bodyParts.forEach(function (b) { bp.appendChild(el("span", "chip", b)); });
+      c.appendChild(bp);
+    }
+    if (r.transitNotes.length) {
+      c.appendChild(el("p", null, "<strong>Current transit triggers:</strong> " + r.transitNotes.join("; ") + "."));
+    }
+    if (r.windows.length) {
+      c.appendChild(el("h4", null, "Accident-sensitive dasha windows"));
+      r.windows.forEach(function (w) {
+        c.appendChild(el("div", "qa-window" + (w.current ? " " : ""),
+          "<span class='when'>" + dasha.fmtDate(w.startMs) + " \u2013 " + dasha.fmtDate(w.endMs) + "</span> &mdash; " +
+          w.mdLord + "\u2013" + w.lord + " dasha" + (w.current ? " <span class='sev-tag high'>active now</span>" : "")));
+      });
+    }
+    c.appendChild(el("p", "hint", "Accident timing is probabilistic; treat sensitive windows as cues for extra caution (driving, sports, machinery), not as predictions."));
+  }
+
+  function computeTimeline(years) {
+    if (!timelineCtx) return;
+    var t = healthTimeline.analyze(timelineCtx.natal, {
+      timeline: timelineCtx.timeline, maraka: timelineCtx.maraka,
+      neechaCancelled: timelineCtx.neechaCancelled, accidentProne: timelineCtx.accidentProne,
+      nowMs: Date.now(), years: years
+    });
+    renderTimeline(t);
+  }
+  function setTimelineYears(y) {
+    timelineYears = y;
+    [10, 20, 30].forEach(function (n) { var b = $("tl-" + n); if (b) b.classList.toggle("active", n === y); });
+    computeTimeline(y);
+  }
+
+  function renderTimeline(t) {
+    $("timeline-range").textContent = healthTimeline.fmt(t.startMs) + " \u2013 " + healthTimeline.fmt(t.endMs);
+    // table
+    var tbody = $("timeline-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    t.rows.forEach(function (r) {
+      tbody.appendChild(el("tr", r.current ? "row-current" : null,
+        "<td>" + (r.current ? "<strong>&#9654; </strong>" : "") + r.label + "</td>" +
+        "<td>" + r.range + "</td>" +
+        "<td>" + r.area + "</td>" +
+        "<td><span class='band " + r.par.klass + "'>" + r.par.label + "</span></td>" +
+        "<td><span class='band " + r.kp.klass + "'>" + r.kp.label + "</span></td>"));
+    });
+    renderTimelineGraph(t);
+  }
+
+  function renderTimelineGraph(t) {
+    var W = 1000, H = 360, ML = 44, MR = 14, MT = 22, MB = 30;
+    var pw = W - ML - MR, ph = H - MT - MB;
+    var span = t.endMs - t.startMs || 1;
+    function X(ms) { return ML + (ms - t.startMs) / span * pw; }
+    function Y(v) { return MT + (1 - v / 100) * ph; }
+    var s = "<svg viewBox='0 0 " + W + " " + H + "' class='timeline-svg' preserveAspectRatio='xMidYMid meet'>";
+    // y gridlines + labels
+    [0, 25, 50, 75, 100].forEach(function (v) {
+      var y = Y(v);
+      s += "<line x1='" + ML + "' y1='" + y.toFixed(1) + "' x2='" + (W - MR) + "' y2='" + y.toFixed(1) + "' stroke='#313a6b' stroke-width='0.7'/>";
+      s += "<text x='" + (ML - 6) + "' y='" + (y + 3).toFixed(1) + "' text-anchor='end' font-size='10' fill='#9aa3cf'>" + v + "</text>";
+    });
+    // x year ticks
+    var startYr = new Date(t.startMs).getUTCFullYear(), endYr = new Date(t.endMs).getUTCFullYear();
+    for (var yr = startYr; yr <= endYr; yr += 2) {
+      var ms = Date.UTC(yr, 0, 1);
+      if (ms < t.startMs || ms > t.endMs) continue;
+      var x = X(ms);
+      s += "<line x1='" + x.toFixed(1) + "' y1='" + MT + "' x2='" + x.toFixed(1) + "' y2='" + (H - MB) + "' stroke='#262c52' stroke-width='0.6'/>";
+      s += "<text x='" + x.toFixed(1) + "' y='" + (H - MB + 16) + "' text-anchor='middle' font-size='10' fill='#9aa3cf'>" + yr + "</text>";
+    }
+    function poly(key, color) {
+      var pts = t.rows.map(function (r) { return X(r.midMs).toFixed(1) + "," + Y(r[key]).toFixed(1); }).join(" ");
+      return "<polyline points='" + pts + "' fill='none' stroke='" + color + "' stroke-width='2'/>";
+    }
+    s += poly("parVit", "#7c83f7"); // Parashara - indigo
+    s += poly("kpVit", "#f2c46d");  // KP - gold
+    // legend
+    s += "<rect x='" + (ML + 6) + "' y='" + (MT + 4) + "' width='12' height='4' fill='#7c83f7'/><text x='" + (ML + 22) + "' y='" + (MT + 9) + "' font-size='11' fill='#e9ecf8'>Parashara vitality</text>";
+    s += "<rect x='" + (ML + 150) + "' y='" + (MT + 4) + "' width='12' height='4' fill='#f2c46d'/><text x='" + (ML + 166) + "' y='" + (MT + 9) + "' font-size='11' fill='#e9ecf8'>KP vitality</text>";
+    s += "</svg>";
+    $("timeline-graph").innerHTML = s;
+  }
+
+  function renderForecastHighlight(fc) {
+    var c = $("forecast-highlight");
+    c.hidden = false;
+    var parts = fc.weakestParts.slice(0, 3).map(function (w) {
+      return "<span class='focus-chip'>" + w.name + "</span>";
+    }).join("");
+    var issues = fc.probableIssues.slice(0, 3).map(function (w) {
+      return "<span class='issue-chip'>" + w.name + "</span>";
+    }).join("");
+    c.innerHTML =
+      "<h3>&#127919; Period Health Focus</h3>" +
+      "<p>" + fc.verdict + "</p>" +
+      "<div class='focus-parts'><strong>Most vulnerable area(s):</strong><br>" + parts + "</div>" +
+      "<div class='focus-parts'><strong>Most probable issue(s):</strong><br>" + issues + "</div>";
+  }
+
+  function renderD6(d6chart, d6Res, f) {
+    var tbody = $("d6-table").querySelector("tbody");
+    tbody.innerHTML = "";
+    core.BODIES.forEach(function (p) {
+      var d = d6chart.planets[p];
+      tbody.appendChild(el("tr", null,
+        "<td>" + p + "</td><td>" + d.sign + "</td><td>" +
+        (f.unknownTime ? "&mdash;" : d.house) + "</td>"));
+    });
+    $("d6-asc").textContent = "D6 Lagna: " + d6chart.lagnaSign + (f.unknownTime ? " (approx \u2014 time unknown)" : "");
+
+    var c = $("d6-out");
+    c.innerHTML = "<h3>D6 Shashthamsa Health Analysis</h3>";
+    if (f.unknownTime) {
+      c.appendChild(el("p", "hint", "House-based D6 analysis needs a birth time. The D6 sign placements above are still valid."));
+      return;
+    }
+    c.appendChild(el("div", "summary-box", d6Res.summary));
+    if (d6Res.findings.length) {
+      c.appendChild(el("h4", null, "Vulnerabilities in the health chart"));
+      d6Res.findings.forEach(function (ff) { c.appendChild(renderFinding(ff)); });
+    }
+    if (d6Res.supportive.length) {
+      var sup = el("div", "finding supportive");
+      sup.appendChild(el("h4", null, "Supportive factors"));
+      var ul = el("ul");
+      d6Res.supportive.forEach(function (s) { ul.appendChild(el("li", null, s)); });
+      sup.appendChild(ul);
+      c.appendChild(sup);
+    }
+  }
+
+  function renderKPDasha(r) {
+    var c = $("kpdasha-out");
+    c.innerHTML = "<h3>KP Dasha Health Analysis</h3>";
+    c.appendChild(el("div", "summary-box", r.summary));
+
+    var jb = el("div", "finding " + r.jointClass);
+    jb.appendChild(el("h4", null, "Running-period verdict (KP) <span class='sev-tag " + r.jointClass + "'>" +
+      (r.jointClass === "high" ? "sensitive" : r.jointClass === "moderate" ? "guarded" : "favourable") + "</span>"));
+    jb.appendChild(el("p", null, r.jointVerdict));
+    if (r.bodyParts.length) {
+      var bpj = el("div", "bodyparts");
+      bpj.appendChild(el("span", null, "<strong>Areas implicated:</strong> "));
+      r.bodyParts.forEach(function (b) { bpj.appendChild(el("span", "chip", b.name)); });
+      jb.appendChild(bpj);
+    }
+    c.appendChild(jb);
+
+    r.levels.forEach(function (l) {
+      var div = el("div", "finding " + l.klass);
+      div.appendChild(el("h4", null, l.level + ": " + l.lord +
+        " <span class='hint'>(in star of " + l.starLord + ")</span>"));
+      div.appendChild(el("p", null,
+        "Signifies houses [" + l.signifies.join(", ") + "]" +
+        (l.primary.length ? " &middot; primary via star lord: [" + l.primary.join(", ") + "]" : "") +
+        "<br>" + l.verdict));
+      if (l.bodyParts.length) {
+        var b = el("div", "bodyparts");
+        l.bodyParts.forEach(function (x) { b.appendChild(el("span", "chip", x)); });
+        div.appendChild(b);
+      }
+      c.appendChild(div);
+    });
+  }
+
+  function dashaBadge(klass, label) { return "<span class='sev-tag " + klass + "'>" + label + "</span>"; }
+  function dashaMark(cur) { return cur ? "<strong>&#9654;</strong>" : ""; }
+
+  function renderParaSchedule(s) {
+    var fd = dasha.fmtDate;
+    var md = $("par-md-table").querySelector("tbody"); md.innerHTML = "";
+    s.mds.forEach(function (m) {
+      md.appendChild(el("tr", m.current ? "row-current" : null,
+        "<td>" + dashaMark(m.current) + "</td><td>" + m.lord + "</td><td>" + fd(m.startMs) + "</td><td>" + fd(m.endMs) +
+        "</td><td>" + (m.basis || "") + "</td><td>" + dashaBadge(m.klass, m.label) + "</td>"));
+    });
+    var ad = $("par-ad-table").querySelector("tbody"); ad.innerHTML = "";
+    s.ads.forEach(function (a) {
+      ad.appendChild(el("tr", a.current ? "row-current" : null,
+        "<td>" + dashaMark(a.current) + "</td><td>" + a.mdLord + "</td><td>" + a.lord + "</td><td>" + fd(a.startMs) +
+        "</td><td>" + fd(a.endMs) + "</td><td>" + dashaBadge(a.klass, a.label) + "</td>"));
+    });
+    var pd = $("par-pd-table").querySelector("tbody"); pd.innerHTML = "";
+    s.pds.forEach(function (p) {
+      pd.appendChild(el("tr", p.current ? "row-current" : null,
+        "<td>" + dashaMark(p.current) + "</td><td>" + p.mdLord + "</td><td>" + p.adLord + "</td><td>" + p.lord +
+        "</td><td>" + fd(p.startMs) + "</td><td>" + fd(p.endMs) + "</td><td>" + dashaBadge(p.klass, p.label) + "</td>"));
+    });
+    var sc = $("par-sensitive-out");
+    sc.innerHTML = "<h3>Health-sensitive upcoming periods (Parashara)</h3>";
+    if (!s.sensitive.length) {
+      sc.appendChild(el("p", "hint", "No strongly adverse Antar Dashas found in the next ~30 years on the Parashara measures (dusthana/maraka lordship, debilitation, Khara points)."));
+    } else {
+      sc.appendChild(el("p", null, "Upcoming Antar Dashas that read as <strong>adverse</strong> in Parashara terms &mdash; windows for extra preventive care, not predictions:"));
+      s.sensitive.forEach(function (a) {
+        sc.appendChild(el("div", "qa-window",
+          "<span class='when'>" + fd(a.startMs) + " \u2013 " + fd(a.endMs) + "</span> &mdash; " +
+          a.mdLord + "\u2013" + a.lord + " " + dashaBadge("high", "Adverse") +
+          (a.basis ? " <span class='hint'>" + a.basis + "</span>" : "")));
+      });
+    }
+  }
+
+  function renderKPSchedule(s) {
+    function badge(klass, label) { return "<span class='sev-tag " + klass + "'>" + label + "</span>"; }
+    function mark(cur) { return cur ? "<strong>&#9654;</strong>" : ""; }
+    var fd = dasha.fmtDate;
+
+    var md = $("kp-md-table").querySelector("tbody"); md.innerHTML = "";
+    s.mds.forEach(function (m) {
+      md.appendChild(el("tr", m.current ? "row-current" : null,
+        "<td>" + mark(m.current) + "</td><td>" + m.lord + "</td><td>" + fd(m.startMs) + "</td><td>" + fd(m.endMs) +
+        "</td><td>" + m.signifies.join(", ") + "</td><td>" + badge(m.klass, m.label) + "</td>"));
+    });
+
+    var ad = $("kp-ad-table").querySelector("tbody"); ad.innerHTML = "";
+    s.ads.forEach(function (a) {
+      ad.appendChild(el("tr", a.current ? "row-current" : null,
+        "<td>" + mark(a.current) + "</td><td>" + a.mdLord + "</td><td>" + a.lord + "</td><td>" + fd(a.startMs) +
+        "</td><td>" + fd(a.endMs) + "</td><td>" + badge(a.klass, a.label) + "</td>"));
+    });
+
+    var pd = $("kp-pd-table").querySelector("tbody"); pd.innerHTML = "";
+    s.pds.forEach(function (p) {
+      pd.appendChild(el("tr", p.current ? "row-current" : null,
+        "<td>" + mark(p.current) + "</td><td>" + p.mdLord + "</td><td>" + p.adLord + "</td><td>" + p.lord +
+        "</td><td>" + fd(p.startMs) + "</td><td>" + fd(p.endMs) + "</td><td>" + badge(p.klass, p.label) + "</td>"));
+    });
+
+    var sc = $("kp-sensitive-out");
+    sc.innerHTML = "<h3>Health-sensitive upcoming periods (KP)</h3>";
+    if (!s.sensitive.length) {
+      sc.appendChild(el("p", "hint", "No strongly adverse Antar Dashas (joint MD+AD on houses 6/8/12) found in the next ~30 years. Periods still vary; see the tables above."));
+    } else {
+      sc.appendChild(el("p", null, "These upcoming Antar Dashas read as <strong>adverse</strong> in KP terms (both the Maha and Antar lords signify disease houses 6/8/12). Use them as windows for extra preventive care &amp; screening &mdash; not as predictions of certainty:"));
+      s.sensitive.forEach(function (a) {
+        sc.appendChild(el("div", "qa-window",
+          "<span class='when'>" + fd(a.startMs) + " \u2013 " + fd(a.endMs) + "</span> &mdash; " +
+          a.mdLord + "\u2013" + a.lord + " dasha " + badge("high", "Adverse") +
+          " <span class='hint'>disease houses [" + a.disease.join(", ") + "]</span>"));
+      });
+    }
+  }
+
+  function renderForecast(fc) {
+    var c = $("forecast-out");
+    c.innerHTML = "<h3>Period Health Forecast</h3>";
+    c.appendChild(el("p", null,
+      "Running period: " +
+      "<span class='period-pill'>" + fc.period.md.lord + " Maha</span>" +
+      "<span class='period-pill'>" + fc.period.ad.lord + " Antar</span>" +
+      "<span class='period-pill'>" + fc.period.pd.lord + " Pratyantar</span>"));
+
+    var box = el("div", "finding " + fc.riskClass);
+    box.appendChild(el("h4", null, "Synthesis &amp; verdict <span class='sev-tag " + fc.riskClass + "'>" + fc.riskLevel + " risk</span>"));
+    box.appendChild(el("p", null, fc.verdict));
+    var ul = el("ul");
+    fc.reasoning.forEach(function (r) { ul.appendChild(el("li", null, r)); });
+    box.appendChild(ul);
+    c.appendChild(box);
+
+    // PROMISE (natal charts) -- primary
+    var promised = fc.contributors.filter(function (ct) { return ct.promiseScore > 0; });
+    c.appendChild(el("h4", null, "Promised vulnerabilities &mdash; from the charts (D1 / KP / D6) <span class='hint'>primary weight</span>"));
+    if (!promised.length) c.appendChild(el("p", "hint", "No strong disease promise detected in the natal charts."));
+    promised.forEach(function (ct) {
+      var div = el("div", "finding " + (ct.confluence ? "high" : "moderate"));
+      div.appendChild(el("h4", null, ct.planet +
+        " <span class='hint'>promise " + ct.promiseScore + "</span>" +
+        (ct.confluence ? " <span class='sev-tag high'>triggered now</span>" : "")));
+      if (ct.notes.length) div.appendChild(el("p", null, ct.notes.join("; ") + "."));
+      if (ct.confluence) div.appendChild(el("p", null, "<strong>Confluence:</strong> currently active as " + ct.roles.join(", ") + " &mdash; severity raised."));
+      c.appendChild(div);
+    });
+
+    // TRIGGERS (dasha + transit) -- secondary
+    c.appendChild(el("h4", null, "Current triggers &mdash; dasha &amp; transit <span class='hint'>secondary weight</span>"));
+    var triggers = fc.contributors.filter(function (ct) { return ct.triggerWeight > 0; });
+    triggers.forEach(function (ct) {
+      var div = el("div", "finding low");
+      div.appendChild(el("h4", null, ct.planet + " <span class='hint'>(" + ct.roles.join("; ") + ")</span>" +
+        (ct.confluence ? " <span class='sev-tag high'>activates a promise</span>" : " <span class='hint'>no promised disease &mdash; limited effect</span>")));
+      c.appendChild(div);
+    });
+    if (fc.transitNotes && fc.transitNotes.length) {
+      c.appendChild(el("p", null, "<strong>Transit triggers:</strong> " + fc.transitNotes.join("; ") + "."));
+    }
+
+    var bp = el("div", "bodyparts");
+    bp.appendChild(el("span", null, "<strong>Most vulnerable areas (promise-led):</strong> "));
+    fc.weakestParts.forEach(function (w) { bp.appendChild(el("span", "chip", w.name)); });
+    c.appendChild(bp);
+  }
+
+  var QA_EXAMPLES = [
+    "Will I get a heart attack?",
+    "Will I get cancer?",
+    "Do I have a risk of diabetes?",
+    "Any risk to my kidneys?",
+    "Could I face depression or anxiety?",
+    "Am I prone to joint or bone problems?"
+  ];
+
+  function renderQAExamples() {
+    var c = $("qa-examples");
+    if (!c) return;
+    c.innerHTML = "<span class='hint'>Try:</span> ";
+    QA_EXAMPLES.forEach(function (q) {
+      var chip = el("span", "qa-chip", q);
+      chip.addEventListener("click", function () { $("qa-input").value = q; askQuestion(); });
+      c.appendChild(chip);
+    });
+  }
+
+  function renderQAReady(unknownTime) {
+    var out = $("qa-out");
+    if (!out) return;
+    if (unknownTime) {
+      out.innerHTML = "<p class='hint'>Specific question analysis needs a birth time (it relies on houses, the D6 chart and the maraka points). Please provide the time of birth and re-generate.</p>";
+    } else {
+      out.innerHTML = "<p class='hint'>Screening ready. Ask a question above.</p>";
+    }
+  }
+
+  function askQuestion() {
+    var out = $("qa-out");
+    var q = $("qa-input").value.trim();
+    if (!q) { out.innerHTML = "<p class='error'>Please type a question.</p>"; return; }
+    if (!qaContext) {
+      out.innerHTML = "<p class='error'>Please generate the screening first (fill birth details, including time, and click \u201cGenerate Health Screening\u201d).</p>";
+      return;
+    }
+    var a = qa.analyze(qaContext, q);
+    renderQAAnswer(a);
+  }
+
+  function renderQAAnswer(a) {
+    var out = $("qa-out");
+    out.innerHTML = "";
+    var box = el("div", "qa-answer " + a.likelihoodClass);
+    box.appendChild(el("h4", null,
+      "Q: " + escapeHtml(a.question) +
+      "<span class='qa-likelihood " + a.likelihoodClass + "'>" + a.likelihood + "</span>"));
+    box.appendChild(el("p", null, a.verdict));
+    if (!a.matched) {
+      box.appendChild(el("p", "hint", "I couldn't match a specific condition, so this was assessed as a general-health question. Try naming a condition (e.g. heart, cancer, diabetes, kidney, thyroid)."));
+    }
+
+    if (a.positive) {
+      if (a.organs.length) {
+        var bp = el("div", "bodyparts");
+        bp.appendChild(el("span", null, "<strong>Most implicated area(s):</strong> "));
+        a.organs.forEach(function (o) { bp.appendChild(el("span", "chip", o.name)); });
+        box.appendChild(bp);
+      }
+      if (a.windows.length) {
+        box.appendChild(el("p", null, "<strong>Most sensitive period(s):</strong>"));
+        a.windows.forEach(function (w) {
+          box.appendChild(el("div", "qa-window",
+            "<span class='when'>" + dasha.fmtDate(w.startMs) + " \u2013 " + dasha.fmtDate(w.endMs) + "</span> " +
+            "&mdash; " + w.mdLord + "\u2013" + w.lord + " dasha" +
+            (w.refine ? " (focus: " + w.refine.lord + " sub-period, " + dasha.fmtDate(w.refine.startMs) + " \u2013 " + dasha.fmtDate(w.refine.endMs) + ")" : "")));
+        });
+      }
+    }
+
+    if (a.reasons.length) {
+      box.appendChild(el("p", null, "<strong>Astrological basis:</strong>"));
+      var ul = el("ul");
+      a.reasons.slice(0, 6).forEach(function (r) { ul.appendChild(el("li", null, r)); });
+      box.appendChild(ul);
+    }
+    out.appendChild(box);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  // ---- Per-device usage counter (localStorage) ----
+  var USAGE_KEY = "ahs_usage_count";
+  function readUsage() {
+    try { return parseInt(localStorage.getItem(USAGE_KEY) || "0", 10) || 0; } catch (e) { return null; }
+  }
+  function showUsage(n) {
+    if (n === undefined) n = readUsage();
+    var el = $("usage-counter");
+    if (!el) return;
+    if (n === null) { el.textContent = "Usage counter unavailable (private browsing)."; return; }
+    el.textContent = "Screenings generated on this device: " + n.toLocaleString();
+  }
+  function bumpUsage() {
+    var n = readUsage();
+    if (n === null) return;
+    n += 1;
+    try { localStorage.setItem(USAGE_KEY, String(n)); } catch (e) { }
+    showUsage(n);
+  }
+
+  function printReport() {
+    if ($("results").hidden) {
+      alert("Please generate the screening first, then print.");
+      return;
+    }
+    var d = new Date();
+    $("report-date").textContent = "Report generated " + d.toLocaleString();
+    window.print();
+  }
+
+  // Collect all CSS currently applied (inline <style> first; linked sheets as fallback).
+  function collectCss() {
+    var css = "";
+    var styles = document.querySelectorAll("style");
+    for (var i = 0; i < styles.length; i++) css += styles[i].textContent + "\n";
+    if (!css.trim()) {
+      for (var s = 0; s < document.styleSheets.length; s++) {
+        try {
+          var rules = document.styleSheets[s].cssRules;
+          for (var j = 0; j < rules.length; j++) css += rules[j].cssText + "\n";
+        } catch (e) { /* cross-origin sheet: skip */ }
+      }
+    }
+    return css;
+  }
+
+  function ymd() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
+  // One-click self-contained HTML report (vibrant colours, all tabs expanded).
+  function downloadReport() {
+    if ($("results").hidden) {
+      alert("Please generate the screening first, then download.");
+      return;
+    }
+    $("report-date").textContent = "Report generated " + new Date().toLocaleString();
+    renderLetterhead();
+
+    var overrides = "\n/* report export overrides */\n" +
+      "#form-card,.tabs,.report-actions,.qa-examples,#qa-input,#qa-btn,.city-search,.city-results,.usage-counter,.chart-fmt-toggle{display:none!important}\n" +
+      "#results{display:block!important}\n.tab-panel{display:block!important}\n" +
+      ".table-scroll.tall{max-height:none!important;overflow:visible!important}\n" +
+      "body{background:#0e1020}\n" +
+      "*{-webkit-print-color-adjust:exact;print-color-adjust:exact}\n";
+
+    var header = document.querySelector(".site-header").outerHTML;
+    var banner = document.querySelector(".disclaimer-banner");
+    banner = banner ? banner.outerHTML : "";
+    var results = $("results").outerHTML;
+    var footer = document.querySelector(".site-footer");
+    footer = footer ? footer.outerHTML : "";
+    var printFooter = document.getElementById("print-footer");
+    printFooter = printFooter ? printFooter.outerHTML : "";
+
+    var nm = ($("name").value.trim() || "client").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    var docHtml = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+      "<title>Astrological Health Report</title><style>" + collectCss() + overrides + "</style></head><body>" +
+      header + banner + "<main class=\"wrap\">" + results + "</main>" + footer + printFooter + "</body></html>";
+
+    var blob = new Blob([docHtml], { type: "text/html;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "health-report-" + nm + "-" + ymd() + ".html";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function renderLetterhead() {
+    var name = $("lh-name").value.trim();
+    var tagline = $("lh-tagline").value.trim();
+    var contact = $("lh-contact").value.trim();
+    var lh = $("letterhead");
+    if (!name && !tagline && !contact && !logoDataUrl) { lh.hidden = true; return; }
+    lh.hidden = false;
+    $("lh-name-out").textContent = name;
+    $("lh-tagline-out").textContent = tagline;
+    $("lh-contact-out").textContent = contact;
+    var img = $("lh-logo-img");
+    if (logoDataUrl) { img.src = logoDataUrl; img.hidden = false; } else { img.hidden = true; }
+  }
+
+  function run(e) {
+    if (e) e.preventDefault();
+    var err = $("form-error");
+    err.hidden = true;
+    try {
+      var f = parseForm();
+      var natal = buildNatal(f);
+      var transit = buildTransit(natal);
+      var parRes = parashara.analyze(natal);
+      var kpRes = kp.analyze(natal);
+
+      // Dasha + divisionals + forecast
+      var dz = dasha.compute(natal.jd, natal.planets.Moon.lon);
+      var qaTimeline = dasha.timeline(natal.jd, natal.planets.Moon.lon);
+      var n64 = varga.navamsa64(natal.planets.Moon.lon);
+      var d22 = varga.drekkana22(natal.ascendant.signIndex, natal.ascendant.degInSign);
+      var d6chart = varga.buildD6(natal);
+      var d6Res = d6engine.analyze(d6chart);
+      var fc = null;
+
+      $("overview-meta").textContent =
+        (f.name ? f.name + " \u2014 " : "") +
+        f.d + "/" + f.mo + "/" + f.y + " at " + pad(f.h) + ":" + pad(f.mi) +
+        " (UTC" + (f.tz >= 0 ? "+" : "") + f.tz + ") \u00b7 " +
+        f.lat.toFixed(2) + "\u00b0, " + f.lon.toFixed(2) + "\u00b0 \u00b7 Ayanamsa " + natal.ayanamsa.toFixed(3) + "\u00b0";
+      $("par-score").textContent = f.unknownTime ? "n/a*" : parRes.score;
+      $("kp-score").textContent = f.unknownTime ? "n/a*" : kpRes.score;
+
+      var sb = f.unknownTime ? null : shadbala.compute(natal, { jd: natal.jd, latDeg: f.lat });
+      var d9chart = varga.buildD9(natal);
+      var d3chart = varga.buildD3(natal);
+      var neechaRes = neecha.analyze(natal, d9chart);
+      renderNativeDetails(f);
+      renderCharts(natal, d9chart, d3chart, d6chart);
+      renderNatalTable(natal, f, sb);
+      renderNeecha(neechaRes);
+      renderTransits(transit, natal, f);
+      renderDasha(dz);
+      renderDivisional(natal, d22, n64, f);
+      renderD6(d6chart, d6Res, f);
+
+      if (f.unknownTime) {
+        $("parashara-out").innerHTML = "<h3>Parashara Health Analysis</h3><p class='hint'>House-based analysis needs a birth time. Enter the time of birth to enable the full Parashara &amp; KP screening. Planetary sign/nakshatra placements above are still valid.</p>";
+        $("accident-out").innerHTML = "<h3>Accident &amp; Injury Risk</h3><p class='hint'>Accident analysis uses houses (1/4/6/8) and needs an accurate birth time.</p>";
+        $("timeline-graph").innerHTML = "";
+        $("timeline-table").querySelector("tbody").innerHTML = "";
+        $("timeline-range").textContent = "(needs birth time)";
+        $("kp-out").innerHTML = "<h3>KP Health Analysis</h3><p class='hint'>KP relies on house cusps, which require an accurate birth time.</p>";
+        $("risk-level").textContent = "n/a*";
+        $("d6-score").textContent = "n/a*";
+        $("forecast-highlight").hidden = true;
+        $("forecast-out").innerHTML = "<h3>Period Health Forecast</h3><p class='hint'>The pinpointed forecast needs a birth time (it uses houses and the 22nd-Drekkana point). The Dasha timeline and 64th-Navamsa point above are still shown.</p>";
+        $("kpdasha-out").innerHTML = "<h3>KP Dasha Health Analysis</h3><p class='hint'>KP dasha analysis relies on house significators, which need an accurate birth time.</p>";
+        $("shadbala-out").innerHTML = "<h3>Shadbala</h3><p class='hint'>Shadbala uses house placement (Dig Bala, day/night, Kendradi), which needs an accurate birth time.</p>";
+      } else {
+        renderParashara(parRes);
+        renderKP(kpRes);
+        var accRes = accident.analyze(natal, { d6: d6chart, timeline: qaTimeline, transit: transit, nowMs: Date.now() });
+        renderAccident(accRes);
+        $("d6-score").textContent = d6Res.score;
+        fc = predict.forecast(natal, dz, { d22Lord: d22.lord, n64Lord: n64.lord }, { d6: d6chart, shadbala: shadbala.statusMap(sb), neechaCancelled: neecha.cancelledSet(neechaRes), transit: transit });
+        var rl = $("risk-level");
+        rl.textContent = fc.riskLevel;
+        rl.className = "score-value risk-" + fc.riskClass;
+        renderForecastHighlight(fc);
+        renderForecast(fc);
+        renderParaSchedule(predict.schedule(natal, qaTimeline, { d22Lord: d22.lord, n64Lord: n64.lord }, Date.now()));
+        renderKPDasha(kpdasha.analyze(natal, dz));
+        renderKPSchedule(kpdasha.schedule(natal, qaTimeline, Date.now()));
+        renderShadbala(sb, shadbala.healthAnalysis(sb));
+        timelineCtx = { natal: natal, timeline: qaTimeline, maraka: { d22Lord: d22.lord, n64Lord: n64.lord }, neechaCancelled: neecha.cancelledSet(neechaRes), accidentProne: accRes.score >= 4.5 };
+        computeTimeline(timelineYears);
+      }
+
+      // Enable the Ask-a-Question module with a ready context.
+      qaContext = f.unknownTime ? null : {
+        chart: natal, d6: d6chart, d22Lord: d22.lord, n64Lord: n64.lord,
+        timeline: qaTimeline, nowMs: Date.now()
+      };
+      renderQAReady(f.unknownTime);
+      renderLetterhead();
+
+      $("results").hidden = false;
+      $("results").scrollIntoView({ behavior: "smooth" });
+      bumpUsage();
+    } catch (ex) {
+      err.textContent = ex.message || String(ex);
+      err.hidden = false;
+    }
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function loadSample() {
+    $("name").value = "Sample Native";
+    $("dob").value = "1990-08-15";
+    $("tob").value = "14:30";
+    $("unknown-time").checked = false;
+    $("lat").value = "18.9600";
+    $("lon").value = "72.8200";
+    $("tz").value = "5.5";
+    $("place-resolved").textContent = "Selected: Mumbai, Maharashtra, India \u00b7 Asia/Kolkata (UTC+5.5)";
+  }
+
+  function initTabs() {
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.addEventListener("click", function () {
+        document.querySelectorAll(".tab").forEach(function (x) { x.classList.remove("active"); });
+        document.querySelectorAll(".tab-panel").forEach(function (x) { x.classList.remove("active"); });
+        t.classList.add("active");
+        $("tab-" + t.dataset.tab).classList.add("active");
+      });
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    $("birth-form").addEventListener("submit", run);
+    $("city-btn").addEventListener("click", searchCity);
+    $("city").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); searchCity(); } });
+    $("sample-btn").addEventListener("click", loadSample);
+    $("qa-btn").addEventListener("click", askQuestion);
+    $("qa-input").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); askQuestion(); } });
+    renderQAExamples();
+    $("print-btn").addEventListener("click", printReport);
+    $("fmt-south").addEventListener("click", function () { setChartFormat("south"); });
+    $("fmt-north").addEventListener("click", function () { setChartFormat("north"); });
+    [10, 20, 30].forEach(function (n) { var b = $("tl-" + n); if (b) b.addEventListener("click", function () { setTimelineYears(n); }); });
+    $("download-btn").addEventListener("click", downloadReport);
+    $("lh-logo").addEventListener("change", function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) { logoDataUrl = null; return; }
+      var reader = new FileReader();
+      reader.onload = function (ev) { logoDataUrl = ev.target.result; renderLetterhead(); };
+      reader.readAsDataURL(file);
+    });
+    $("unknown-time").addEventListener("change", function () {
+      $("tob").disabled = this.checked;
+    });
+    initTabs();
+    showUsage();
+  });
+})();

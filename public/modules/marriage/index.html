@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Astro World · Vedic Marriage Matching — BPHS &amp; KP</title>
+  <link rel="icon" type="image/svg+xml" href="../astro-world-brand-icon.svg" />
+  <link rel="stylesheet" href="../astro-world-brand.css" />
+  <meta name="description" content="Marriage compatibility module using BPHS and KP astrology: bhava analysis, Ashtakoota & Dashakoota, dasha/transit timeline, marriage timing and health compatibility." />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="stylesheet" href="css/styles.css?v=37" />
+  <!-- html2pdf for PDF export (graceful fallback to window.print) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+</head>
+<body data-siddhanta-module="marriage">
+  <header class="app-header">
+    <h1><span class="om">&#x0950;</span> Marriage Matching</h1>
+    <p>House (Bhāva) significations of both partners studied and tabulated, assessed through
+       <b>BPHS</b> and <b>KP</b> astrology — with Ashtakoota &amp; Dashakoota matching, nearest
+       marriage timing, a 20-year Dasha + Transit relationship forecast, and integrated
+       Health-Compatibility screening.</p>
+    <p class="dev-credit">Astro World · Developed by <b>Dr. Anil Sabaji</b> &nbsp;•&nbsp; Email:
+       <a href="mailto:anilsabaji@gmail.com">anilsabaji@gmail.com</a></p>
+  </header>
+
+  <div class="container">
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="input">1 &middot; Birth Details</button>
+      <button class="tab-btn" data-tab="charts">2 &middot; Charts</button>
+      <button class="tab-btn" data-tab="bhava">3 &middot; Bhāva Significations</button>
+      <button class="tab-btn" data-tab="bphs">4 &middot; BPHS Assessment</button>
+      <button class="tab-btn" data-tab="kp">5 &middot; KP Assessment</button>
+      <button class="tab-btn" data-tab="koota">6 &middot; Koota Matching</button>
+      <button class="tab-btn" data-tab="kuja">7 &middot; Kuja Dosha</button>
+      <button class="tab-btn" data-tab="timing">8 &middot; Marriage Timing</button>
+      <button class="tab-btn" data-tab="forecast">9 &middot; 20-Year Forecast</button>
+      <button class="tab-btn" data-tab="transit">10 &middot; Transits</button>
+      <button class="tab-btn" data-tab="health">11 &middot; Health Compatibility</button>
+      <button class="tab-btn" data-tab="sarvashtaka">12 &middot; Sarvashtakavarga</button>
+      <button class="tab-btn" data-tab="progeny">13 &middot; Progeny</button>
+      <button class="tab-btn" data-tab="manual">14 &middot; Technical Manual</button>
+      <button class="tab-btn" data-tab="report">15 &middot; PDF Report</button>
+    </nav>
+
+    <!-- 1. INPUT -->
+    <section class="tab-panel active" id="tab-input">
+      <div class="card">
+        <h2>Enter Birth Details</h2>
+        <div class="mode-select">
+          <div class="seg" id="modeSeg">
+            <button type="button" class="seg-btn active" data-mode="couple">👫 Couple</button>
+            <button type="button" class="seg-btn" data-mode="individual">👤 Individual</button>
+          </div>
+          <div class="seg" id="whoSeg" style="display:none">
+            <span class="seg-label">Analyse:</span>
+            <button type="button" class="seg-btn active" data-who="boy">Boy (Groom)</button>
+            <button type="button" class="seg-btn" data-who="girl">Girl (Bride)</button>
+          </div>
+        </div>
+        <p class="muted small">Provide accurate date, time and place (latitude &amp; east-longitude,
+          and the time-zone offset in effect at birth). Accuracy of timing-based results depends on
+          correct birth time. <span class="preset-link" id="loadSample">Load a sample couple</span></p>
+        <form id="matchForm">
+          <div class="form-grid">
+            <fieldset class="boy">
+              <legend>Groom (Boy)</legend>
+              <label>Name</label>
+              <input type="text" id="b_name" value="Groom" />
+              <div class="row-3">
+                <div><label>Day</label><input type="number" id="b_d" value="15" min="1" max="31" /></div>
+                <div><label>Month</label><input type="number" id="b_m" value="6" min="1" max="12" /></div>
+                <div><label>Year</label><input type="number" id="b_y" value="1990" /></div>
+              </div>
+              <div class="row-3">
+                <div><label>Hour (0-23)</label><input type="number" id="b_h" value="10" min="0" max="23" /></div>
+                <div><label>Minute</label><input type="number" id="b_min" value="30" min="0" max="59" /></div>
+                <div><label>TZ offset (h)</label><input type="number" id="b_tz" value="5.5" step="0.25" /></div>
+              </div>
+              <label>Place of Birth (type city name to auto-fetch coordinates)</label>
+              <input type="text" id="b_place" value="Mumbai, India" placeholder="Start typing city name..." autocomplete="off" />
+              <p class="small muted" style="margin:2px 0 6px">Coordinates and timezone will auto-fill when you select a city from the dropdown.</p>
+              <div class="row-2">
+                <div><label>Latitude (°N +)</label><input type="number" id="b_lat" value="19.07" step="0.000001" /></div>
+                <div><label>Longitude (°E +)</label><input type="number" id="b_lon" value="72.87" step="0.000001" /></div>
+              </div>
+            </fieldset>
+
+            <fieldset class="girl">
+              <legend>Bride (Girl)</legend>
+              <label>Name</label>
+              <input type="text" id="g_name" value="Bride" />
+              <div class="row-3">
+                <div><label>Day</label><input type="number" id="g_d" value="22" min="1" max="31" /></div>
+                <div><label>Month</label><input type="number" id="g_m" value="11" min="1" max="12" /></div>
+                <div><label>Year</label><input type="number" id="g_y" value="1993" /></div>
+              </div>
+              <div class="row-3">
+                <div><label>Hour (0-23)</label><input type="number" id="g_h" value="14" min="0" max="23" /></div>
+                <div><label>Minute</label><input type="number" id="g_min" value="15" min="0" max="59" /></div>
+                <div><label>TZ offset (h)</label><input type="number" id="g_tz" value="5.5" step="0.25" /></div>
+              </div>
+              <label>Place of Birth (type city name to auto-fetch coordinates)</label>
+              <input type="text" id="g_place" value="New Delhi, India" placeholder="Start typing city name..." autocomplete="off" />
+              <p class="small muted" style="margin:2px 0 6px">Coordinates and timezone will auto-fill when you select a city from the dropdown.</p>
+              <div class="row-2">
+                <div><label>Latitude (°N +)</label><input type="number" id="g_lat" value="28.61" step="0.000001" /></div>
+                <div><label>Longitude (°E +)</label><input type="number" id="g_lon" value="77.21" step="0.000001" /></div>
+              </div>
+            </fieldset>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn">Generate Match Report</button>
+            <span class="muted small">Southern hemisphere: use negative latitude. West longitude: use negative value.</span>
+          </div>
+        </form>
+      </div>
+      <div class="card" id="summaryCard" style="display:none">
+        <h2>At-a-Glance Compatibility</h2>
+        <div id="summaryContent"></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="tab-charts"><div class="card"><div class="placeholder">Generate a report to view the planetary charts.</div></div></section>
+    <section class="tab-panel" id="tab-bhava"><div class="card"><div class="placeholder">Generate a report to view bhāva significations.</div></div></section>
+    <section class="tab-panel" id="tab-bphs"><div class="card"><div class="placeholder">Generate a report to view the BPHS assessment.</div></div></section>
+    <section class="tab-panel" id="tab-kp"><div class="card"><div class="placeholder">Generate a report to view the KP assessment.</div></div></section>
+    <section class="tab-panel" id="tab-koota"><div class="card"><div class="placeholder">Generate a report to view Koota matching.</div></div></section>
+    <section class="tab-panel" id="tab-kuja"><div class="card"><div class="placeholder">Generate a report to view Kuja (Maṅgala) Dosha analysis.</div></div></section>
+    <section class="tab-panel" id="tab-timing"><div class="card"><div class="placeholder">Generate a report to view marriage timing.</div></div></section>
+    <section class="tab-panel" id="tab-forecast"><div class="card"><div class="placeholder">Generate a report to view the 20-year forecast.</div></div></section>
+    <section class="tab-panel" id="tab-transit"><div class="card"><div class="placeholder">Generate a report to view transits.</div></div></section>
+    <section class="tab-panel" id="tab-health"><div class="card"><div class="placeholder">Generate a report to view health compatibility.</div></div></section>
+    <section class="tab-panel" id="tab-sarvashtaka"><div class="card"><div class="placeholder">Generate a report to view Sarvashtakavarga analysis.</div></div></section>
+    <section class="tab-panel" id="tab-progeny"><div class="card"><div class="placeholder">Generate a report to view the Progeny (Santāna) analysis.</div></div></section>
+    <section class="tab-panel" id="tab-manual"></section>
+
+    <!-- 12. REPORT -->
+    <section class="tab-panel" id="tab-report">
+      <div class="card no-print">
+        <h2>PDF Print Report</h2>
+        <p class="muted small">Compile the full assessment into a single printable report. Use
+          "Download PDF" to save a file, "Download HTML" for an offline web page, or "Open print dialog" to print / save via the browser.</p>
+        <div class="btn-row">
+          <button class="btn" id="downloadPdf">Download PDF</button>
+          <button class="btn" id="downloadHtml">Download HTML</button>
+          <button class="btn secondary" id="printReport">Open print dialog</button>
+        </div>
+      </div>
+      <div id="report-content"><div class="placeholder">Generate a report first (Tab 1), then return here to export.</div></div>
+    </section>
+
+    <p class="footer-note">For educational &amp; decision-support purposes only. Sidereal (Lahiri) calculations on a self-contained ephemeris — see the Technical Manual for accuracy notes. <span style="opacity:.4">Build v5.24</span></p>
+    <p class="dev-credit footer-credit">Astro World · Developed by <b>Dr. Anil Sabaji</b> &nbsp;•&nbsp; Email: <a href="mailto:anilsabaji@gmail.com">anilsabaji@gmail.com</a></p>
+  </div>
+
+  <script src="../astro-world-brand.js"></script>
+  <script src="../suite-bridge.js"></script>
+  <script src="js/astro-core.js?v=37"></script>
+  <script src="js/bphs.js?v=37"></script>
+  <script src="js/bhava-indications.js?v=37"></script>
+  <script src="js/kp-rules-data.js?v=37"></script>
+  <script src="js/kp.js?v=37"></script>
+  <script src="js/koota.js?v=37"></script>
+  <script src="js/dasha.js?v=37"></script>
+  <script src="js/transit.js?v=37"></script>
+  <script src="js/planet-strength.js?v=37"></script>
+  <script src="js/chart-draw.js?v=37"></script>
+  <script src="js/kuja.js?v=37"></script>
+  <script src="js/separation.js?v=37"></script>
+  <script src="js/timeline.js?v=37"></script>
+  <script src="js/health.js?v=37"></script>
+  <script src="js/sarvashtaka.js?v=37"></script>
+  <script src="js/progeny.js?v=37"></script>
+  <script src="js/geocity.js?v=37"></script>
+  <script src="js/manual.js?v=37"></script>
+  <script src="js/app.js?v=37"></script>
+</body>
+</html>

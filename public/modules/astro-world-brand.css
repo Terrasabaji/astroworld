@@ -1,0 +1,50 @@
+.aw-brand-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.95), rgba(30, 27, 75, 0.92));
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  color: #e2e8f0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+.aw-brand-bar img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.aw-brand-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: #fde68a;
+}
+.aw-brand-tag {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+.aw-developer-credit,
+.aw-developer-credit a {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  text-align: center;
+}
+.aw-developer-credit {
+  margin: 16px auto 20px;
+  padding: 0 12px;
+}
+.aw-developer-credit a {
+  color: #f59e0b;
+  text-decoration: none;
+}
+.aw-developer-credit a:hover {
+  text-decoration: underline;
+}
+.aw-developer-credit strong {
+  color: #cbd5e1;
+}
