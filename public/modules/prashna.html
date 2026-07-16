@@ -3707,8 +3707,9 @@
     }
     const category = raw.category;
     const questionId = (raw.questionId == null) ? '' : String(raw.questionId).trim();
-    if (raw.mode !== 'mooka' && !questionId && (!category || !interpret.CATEGORY_HOUSES[category])) {
-      return { ok: false, message: 'Please select a Prashna question or a Query category.' };
+    const customText = (raw.customText == null) ? '' : String(raw.customText).trim();
+    if (raw.mode !== 'mooka' && !questionId && !customText && (!category || !interpret.CATEGORY_HOUSES[category])) {
+      return { ok: false, message: 'Please select a Prashna question, type a custom question, or choose a Query category.' };
     }
 
     // Horary number is optional, but if present must be an integer in range.
@@ -3734,6 +3735,7 @@
         lat: lat, lon: lon, tz: tz,
         category: category || '',
         questionId: questionId,
+        customText: customText,
         horary: horary,
         place: raw.place ? String(raw.place).trim() : '',
         mode: raw.mode || 'manual'
@@ -3764,7 +3766,67 @@
       const answer = interpret.answerQuestion(input.question, chart);
       return { chart: chart, result: null, answer: answer };
     }
-    const result = interpret.interpret(input.category, chart, input.questionText || '');
+    // Custom typed question: use KarakatwaLookup to derive houses and analyze
+    if (input.customText && typeof KarakatwaLookup !== 'undefined') {
+      var lookup = KarakatwaLookup.lookup(input.customText);
+      // If direct lookup didn't find anything, try individual significant words
+      if ((!lookup || (lookup.houses.length === 0 && lookup.planets.length === 0))) {
+        var stopWords = ['will','i','my','me','the','a','an','is','am','are','be','do','does',
+          'did','have','has','had','can','could','would','should','shall','may','might',
+          'get','got','in','on','at','to','for','of','from','with','by','it','its','this',
+          'that','there','here','when','how','what','which','who','whom','whose','where',
+          'why','not','no','yes','if','or','and','but','so','very','much','more','most',
+          'any','some','all','each','every','about','into','through','during','before',
+          'after','above','below','between','out','up','down','off','over','under','again',
+          'further','then','once','also','just','only','own','same','than','too','now'];
+        var words = input.customText.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/)
+          .filter(function(w) { return w.length > 2 && stopWords.indexOf(w) < 0; });
+        var allPlanets = [], allHouses = [], allSigns = [];
+        var pSeen = {}, hSeen = {};
+        words.forEach(function(word) {
+          var wl = KarakatwaLookup.lookup(word);
+          if (wl) {
+            wl.planets.forEach(function(p) { if (!pSeen[p]) { pSeen[p] = true; allPlanets.push(p); } });
+            wl.houses.forEach(function(h) { if (!hSeen[h]) { hSeen[h] = true; allHouses.push(h); } });
+          }
+        });
+        if (allHouses.length > 0 || allPlanets.length > 0) {
+          lookup = { planets: allPlanets, signs: allSigns, houses: allHouses };
+        }
+      }
+      // If karakatwa identifies relevant houses or planets, build an ad-hoc question
+      if (lookup && (lookup.houses.length > 0 || lookup.planets.length > 0)) {
+        const derivedHouses = lookup.houses
+          .filter(function(h) { return typeof h === 'number' && h >= 1 && h <= 12; })
+          .sort(function(a, b) { return a - b; });
+        if (derivedHouses.length === 0) derivedHouses.push(1);
+        // Determine the handler from the primary house
+        const primaryHouse = derivedHouses[0];
+        const handlerMap = KPApp.catalog.HOUSE_DEFAULT_HANDLER;
+        const handler = handlerMap[primaryHouse] || 'health';
+        const adHocQuestion = {
+          id: '__custom_typed__',
+          text: input.customText,
+          house: primaryHouse,
+          governingHouses: derivedHouses,
+          handler: handler,
+          category: input.category || handler,
+          custom: true,
+          karakatwaDerived: true,
+          karakaPlanets: lookup.planets,
+          interrogatives: ['WHETHER', 'WHEN', 'HOW', 'WHY']
+        };
+        const answer = interpret.answerQuestion(adHocQuestion, chart);
+        return { chart: chart, result: null, answer: answer };
+      }
+    }
+    // If custom text is present but no karakatwa match and no category, use general analysis
+    if (input.customText && !input.category) {
+      const result = interpret.interpret('health', chart, input.customText);
+      result.label = 'Custom Query: ' + input.customText.substring(0, 60);
+      return { chart: chart, result: result, answer: null };
+    }
+    const result = interpret.interpret(input.category, chart, input.questionText || input.customText || '');
     return { chart: chart, result: result, answer: null };
   };
 
@@ -4099,6 +4161,23 @@
     html += ui.printBarHtml();
     html += ui.buildSouthIndianChartHtml(chart, input);
     html += prashnaDetailsCard(input, chart);
+    // Karakatwa derivation card — shows signifying planets and houses when
+    // the question was typed and analyzed via the Karakatwas database
+    if (answer.question && answer.question.karakatwaDerived) {
+      let kBody = '<div class="analysis">';
+      kBody += '<p><strong>Query:</strong> ' + esc(answer.question.text) + '</p>';
+      if (answer.question.karakaPlanets && answer.question.karakaPlanets.length > 0) {
+        kBody += '<p><strong>Signifying Planets (from Karakatwas):</strong> ' +
+          esc(answer.question.karakaPlanets.join(', ')) + '</p>';
+      }
+      if (answer.question.governingHouses && answer.question.governingHouses.length > 0) {
+        kBody += '<p><strong>Signifying Houses (from Karakatwas):</strong> ' +
+          esc(answer.question.governingHouses.join(', ')) + '</p>';
+      }
+      kBody += '<p class="hint">Houses and planets derived automatically from the Karakatwas reference database based on your typed query.</p>';
+      kBody += '</div>';
+      html += card('Karakatwa Analysis \u2014 Query Significators', kBody);
+    }
     html += answerInterrogativesHtml(answer);
     html += planetTableCard(chart);
     html += cuspTableCard(chart);
@@ -4729,6 +4808,7 @@
       category: $(prefix + '-category') ? $(prefix + '-category').value : '',
       questionId: $(prefix + '-question-id') ? $(prefix + '-question-id').value : '',
       horary: $(prefix + '-horary') ? $(prefix + '-horary').value : '',
+      customText: $(prefix + '-custom-text') ? $(prefix + '-custom-text').value : '',
       mode: mode
     };
   }
