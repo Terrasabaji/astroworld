@@ -9,7 +9,10 @@ import { APP_NAME, APP_TAGLINE, GANAPATI_PATH } from '@/lib/branding';
 import { useAuth } from '@/components/auth/AuthGate';
 import FileMenu from '@/components/layout/FileMenu';
 import PanchangaBar from '@/components/layout/PanchangaBar';
-import { Compass, Sparkles, CalendarClock, HelpCircle, Heart, Clock, Stethoscope, GraduationCap, Activity, ArrowLeft } from 'lucide-react';
+import {
+  Compass, Sparkles, CalendarClock, HelpCircle, Heart, Clock, Stethoscope,
+  GraduationCap, Activity, ArrowLeft,
+} from 'lucide-react';
 
 const NAV = [
   { href: '/', label: 'Chart Engine', icon: Compass },
@@ -22,6 +25,46 @@ const NAV = [
   { href: '/adviser', label: 'Education and Career', icon: GraduationCap },
   { href: '/current-assessment', label: 'Current Assessment', icon: Activity },
 ];
+
+function isActivePath(pathname, href) {
+  if (href === '/') return pathname === '/';
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function ModulesSideNav({ pathname }) {
+  return (
+    <aside
+      className="print:hidden shrink-0 border-b md:border-b-0 md:border-r border-saffron-900/30 bg-slate-950/80 md:w-56 lg:w-60 md:sticky md:top-0 md:h-svh md:overflow-y-auto"
+      aria-label="Modules"
+    >
+      <div className="px-3 pt-3 pb-2 md:pt-5">
+        <p className="text-[10px] uppercase tracking-wider text-saffron/70 font-medium px-2 mb-2">
+          Modules
+        </p>
+        <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = isActivePath(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-2.5 shrink-0 px-3 py-2 rounded-md text-sm transition-colors min-h-[40px] ${
+                  active
+                    ? 'bg-saffron-900/30 text-saffron-200 border border-saffron/35'
+                    : 'text-slate-300 border border-transparent hover:bg-saffron-900/15 hover:text-saffron-100'
+                }`}
+              >
+                <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-saffron-300' : 'text-saffron-400/80'}`} />
+                <span className="whitespace-nowrap">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+    </aside>
+  );
+}
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
@@ -60,7 +103,10 @@ export default function AppShell({ children }) {
           </div>
         </header>
 
-        <div className="flex-1">{children}</div>
+        <div className="flex-1 flex flex-col md:flex-row min-h-0">
+          <ModulesSideNav pathname={pathname} />
+          <div className="flex-1 min-w-0">{children}</div>
+        </div>
 
         <footer className="border-t border-slate-800 bg-slate-900/50 py-3 mt-auto print:hidden">
           <DeveloperCredit />
@@ -124,7 +170,10 @@ export default function AppShell({ children }) {
         </div>
       </header>
 
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        <ModulesSideNav pathname={pathname} />
+        <div className="flex-1 min-w-0">{children}</div>
+      </div>
 
       <footer className="border-t border-slate-800 bg-slate-900/50 py-3 mt-auto print:hidden">
         <DeveloperCredit />

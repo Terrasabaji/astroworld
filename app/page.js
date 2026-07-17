@@ -131,22 +131,23 @@ export default function Home() {
 
   return (
     <main className="bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_55%,#111827_100%)] text-slate-100">
-      <div className="container py-8 sm:py-12 pb-10">
-        <LandingBirthForm
-          form={form}
-          onChange={updateForm}
-          onSave={saveBirthRecord}
-          onCancel={cancelForm}
-          onRun={runChart}
-          loading={loading}
-          saving={saving}
-          message={saveMessage}
-          error={error}
-        />
-      </div>
+      <div className={`container py-8 sm:py-12 pb-10 ${result ? 'lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start' : ''}`}>
+        <div className={result ? 'lg:col-span-4 lg:sticky lg:top-4' : ''}>
+          <LandingBirthForm
+            form={form}
+            onChange={updateForm}
+            onSave={saveBirthRecord}
+            onCancel={cancelForm}
+            onRun={runChart}
+            loading={loading}
+            saving={saving}
+            message={saveMessage}
+            error={error}
+          />
+        </div>
 
       {result && (
-        <div className="container pb-8 space-y-4">
+        <div className="mt-8 lg:mt-0 lg:col-span-8 space-y-4">
           <Card className="bg-slate-900/60 border-slate-800">
             <CardContent className="py-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
               <MetaPill label="Ayanamsa" value={`${result.input.ayanamsa.toUpperCase()} → ${result.input.ayanamsa_value.toFixed(4)}°`} />
