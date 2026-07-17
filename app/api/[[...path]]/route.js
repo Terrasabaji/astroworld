@@ -16,6 +16,7 @@ const PY_COMPREHENSIVE = path.join(process.cwd(), 'python_engine', 'run_comprehe
 const PY_MUHURTA = path.join(process.cwd(), 'python_engine', 'run_muhurta.py');
 const PY_YOGA_DOSHA = path.join(process.cwd(), 'python_engine', 'run_yoga_dosha.py');
 const PY_PANCHANGA = path.join(process.cwd(), 'python_engine', 'run_panchanga.py');
+const PY_PRASHNA = path.join(process.cwd(), 'python_engine', 'run_prashna.py');
 
 function resolvePythonExecutable() {
   if (process.env.ASTRO_WORLD_PYTHON) {
@@ -217,6 +218,7 @@ export async function GET(request, { params }) {
       'GET /api/muhurta/events',
       'GET /api/panchanga',
       'POST /api/yoga-dosha/analyze',
+      'POST /api/prashna/analyze',
       'GET /api/cities?q=',
     ],
   });
@@ -350,6 +352,26 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_YOGA_DOSHA, normalizeCalculateBody(body));
+      return pythonJson(result);
+    } catch (e) {
+      return pythonErrorResponse(e);
+    }
+  }
+
+  if (seg === 'prashna/analyze') {
+    try {
+      const body = await request.json();
+      const payload = {
+        ...normalizeCalculateBody(body),
+        mode: body.mode || 'manual',
+        question_text: body.question_text || body.question || '',
+        category: body.category || undefined,
+        horary_number: body.horary_number ?? body.horaryNumber ?? undefined,
+        primary_house: body.primary_house || undefined,
+        name: body.name || 'Querent',
+        altitude: body.altitude || 0,
+      };
+      const result = await runPython(PY_PRASHNA, payload);
       return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
