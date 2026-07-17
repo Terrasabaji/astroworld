@@ -336,6 +336,7 @@ export default function Home() {
           </Tabs>
         </div>
       )}
+      </div>
     </main>
   );
 }
