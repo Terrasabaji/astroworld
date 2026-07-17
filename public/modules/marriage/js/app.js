@@ -11,6 +11,28 @@
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const fix = (n, d = 2) => Number(n).toFixed(d);
 
+  function isUnmarriedStatus(value) {
+    const v = String(value || 'unmarried').toLowerCase();
+    return v === 'unmarried';
+  }
+
+  /** Marriage-event timing is shown only for unmarried natives (landing marital status). */
+  function shouldShowMarriageTiming() {
+    const meta = window.__AW_MARITAL__ || {};
+    if (state.mode === 'individual') {
+      const status = state.who === 'boy' ? meta.groom : meta.bride;
+      // Prefer the Chart Engine native status when analyzing the primary person.
+      return isUnmarriedStatus(status != null ? status : meta.native);
+    }
+    return isUnmarriedStatus(meta.groom) && isUnmarriedStatus(meta.bride);
+  }
+
+  function marriageTimingSkippedHtml(title) {
+    return `<div class="card"><h2>${esc(title)}</h2>
+      <div class="callout">Marriage event timing is shown only when the native is <b>unmarried</b>
+      (from the Chart Engine marital status). Update marital status on the landing page if needed.</div></div>`;
+  }
+
   function chip(label, cls) { return `<span class="chip ${cls || ''}">${esc(label)}</span>`; }
   function gauge(label, val, max, cls) {
     const pct = Math.round((val / max) * 100);
@@ -118,7 +140,10 @@
     r.bphs = BPHS.coupleAssessment(boy, girl);
     r.kp = KP.coupleAssessment(boy, girl);
     r.health = Health.compatibility(boy, girl);
-    r.window = Timeline.coupleMarriageWindow(boy, girl, state.fromJd);
+    r.showMarriageTiming = shouldShowMarriageTiming();
+    r.window = r.showMarriageTiming
+      ? Timeline.coupleMarriageWindow(boy, girl, state.fromJd)
+      : null;
     r.forecast = Timeline.relationshipForecast(boy, girl, state.fromJd, 20);
     r.bhavaB = BPHS.analyzeAll(boy);
     r.bhavaG = BPHS.analyzeAll(girl);
@@ -128,6 +153,9 @@
     r.sarvashtaka = Sarvashtaka.coupleAnalysis(boy, girl);
     r.strengthSeries = Timeline.strengthSeries(boy, girl, state.fromJd, 20, 3);
     r.strengthDual = Timeline.strengthSeriesDual(boy, girl, state.fromJd, 20, 3);
+    r.progeny = (typeof Progeny !== 'undefined')
+      ? Progeny.couple(boy, girl, state.fromJd, 20)
+      : null;
     state.results = r;
 
     const safeRender = (fn, name) => { try { fn(); } catch(e) { console.warn(name + ' render error:', e); } };
@@ -143,6 +171,7 @@
     safeRender(renderTransit, 'Transit');
     safeRender(renderHealth, 'Health');
     safeRender(renderSarvashtaka, 'Sarvashtaka');
+    safeRender(renderProgeny, 'Progeny');
     safeRender(renderReport, 'Report');
   }
 
@@ -165,9 +194,15 @@
     r.health = Health.screen(chart);
     r.kuja = KujaDosha.analyze(chart);
     r.separation = Separation.analyze(chart, gender);
-    r.window = Timeline.marriageWindow(chart, gender, state.fromJd);
+    r.showMarriageTiming = shouldShowMarriageTiming();
+    r.window = r.showMarriageTiming
+      ? Timeline.marriageWindow(chart, gender, state.fromJd)
+      : null;
     r.single = Timeline.strengthSeriesSingle(chart, gender, state.fromJd, 20, 3);
     r.transit = Transit.summary(chart, state.fromJd, 20);
+    r.progeny = (typeof Progeny !== 'undefined')
+      ? Progeny.analyze(chart, gender, state.fromJd, 20)
+      : null;
     state.results = r;
 
     const SR = (fn, n) => { try { fn(); } catch (e) { console.warn(n + ' (indiv) render error:', e); } };
@@ -183,12 +218,15 @@
     SR(() => { $('tab-transit').innerHTML = `<div class="card"><h2>Gochara (Transit) Outlook — ${esc(name)}</h2>${header(chart)}${transitTable(r.transit)}</div>`; }, 'Transit');
     SR(renderHealthIndividual, 'Health');
     SR(renderSavIndividual, 'Sarvashtaka');
+    SR(renderProgeny, 'Progeny');
     SR(renderReportIndividual, 'Report');
   }
 
   function renderSummaryIndividual() {
     const r = state.results; const idx = r.bphsIndex.index; const v = BPHS.verdict(idx);
-    const near = (r.window && r.window.nearest) ? `${Dasha.fmtDMY(r.window.nearest.startJd)} – ${Dasha.fmtDMY(r.window.nearest.endJd)}` : '—';
+    const near = (r.showMarriageTiming && r.window && r.window.nearest)
+      ? `${Dasha.fmtDMY(r.window.nearest.startJd)} – ${Dasha.fmtDMY(r.window.nearest.endJd)}`
+      : (r.showMarriageTiming ? '—' : 'Not applicable (married)');
     $('summaryCard').style.display = 'block';
     $('summaryContent').innerHTML = `
       <div class="grid-3">
@@ -266,7 +304,12 @@
   }
 
   function renderTimingIndividual() {
-    const r = state.results; const w = r.window;
+    const r = state.results;
+    if (!r.showMarriageTiming) {
+      $('tab-timing').innerHTML = marriageTimingSkippedHtml('Marriage Timing — ' + r.name);
+      return;
+    }
+    const w = r.window || {};
     let rows = '';
     (w.topByScore || []).forEach((t) => { rows += `<tr><td>${Dasha.fmtDMY(t.startJd)} – ${Dasha.fmtDMY(t.endJd)}</td><td>${t.md}/${t.ad}/${t.pd}</td><td class="num">${fix(t.score, 1)}</td></tr>`; });
     const near = (w.nearest) ? `${Dasha.fmtDMY(w.nearest.startJd)} – ${Dasha.fmtDMY(w.nearest.endJd)}` : '—';
@@ -366,7 +409,9 @@
     const idx = r.bphsIndex.index; const v = BPHS.verdict(idx);
     const grab = (id) => { const el = $('tab-' + id); return el ? el.innerHTML : ''; };
     const section = (t, id) => `<div class="report-section"><h2 class="report-section-title">${esc(t)}</h2>${grab(id)}</div>`;
-    const near = (r.window && r.window.nearest) ? `${Dasha.fmtDMY(r.window.nearest.startJd)} – ${Dasha.fmtDMY(r.window.nearest.endJd)}` : '—';
+    const near = (r.showMarriageTiming && r.window && r.window.nearest)
+      ? `${Dasha.fmtDMY(r.window.nearest.startJd)} – ${Dasha.fmtDMY(r.window.nearest.endJd)}`
+      : (r.showMarriageTiming ? '—' : 'Not applicable (married)');
     $('report-content').innerHTML = `
       <div class="card report-cover">
         <h2 style="text-align:center">Individual Marriage Analysis</h2>
@@ -402,8 +447,11 @@
     const r = state.results;
     // weighted overall: koota 30%, bphs 20%, kp 20%, health 15%, timing readiness 15%
     const kootaPct = Math.round((r.koota.ashtakoota.total / 36) * 100);
+    const timingPct = (r.showMarriageTiming && r.window && r.window.peak)
+      ? Math.min(98, Math.round(r.window.peak.joint * 12 + 40))
+      : 50;
     const v = kootaPct * 0.3 + r.bphs.combined * 0.2 + r.kp.combined * 0.2 + r.health.score * 0.15 +
-      Math.min(98, Math.round(r.window.peak.joint * 12 + 40)) * 0.15;
+      timingPct * 0.15;
     return Math.round(v);
   }
   function overallVerdict(s) {
@@ -434,7 +482,11 @@
           ${gaugePct('KP promise confidence', r.kp.combined)}
           ${gaugePct('Health compatibility', r.health.score)}
           ${gaugePct('Sarvashtakavarga (SAV)', r.sarvashtaka.score)}
-          <div class="kv"><span>Nearest marriage window</span><span>${esc(r.window.nearestRange)}</span></div>
+          <div class="kv"><span>Nearest marriage window</span><span>${
+            r.showMarriageTiming && r.window
+              ? esc(r.window.nearestRange)
+              : 'Not applicable (married)'
+          }</span></div>
         </div>
       </div>
       ${r.koota.ashtakoota.doshas.length ? `<div class="callout warn"><b>Dosha alerts:</b> ${r.koota.ashtakoota.doshas.join(', ')} — see the Koota tab for remedial context.</div>` : ''}
@@ -844,9 +896,82 @@
         cancellation), which a qualified astrologer should confirm.</div>`;
   }
 
+  /* ---------------- Progeny (Children) ---------------- */
+  function renderProgeny() {
+    const r = state.results;
+    const p = r.progeny;
+    if (!p) {
+      $('tab-progeny').innerHTML = `<div class="card"><h2>Progeny (Santāna)</h2>
+        <div class="placeholder">Progeny analysis is unavailable.</div></div>`;
+      return;
+    }
+
+    const marriageBlock = r.showMarriageTiming && r.window
+      ? (r.individual
+        ? `<div class="card"><h3>Marriage event timing (unmarried natives only)</h3>
+            <div class="kv"><span>Nearest marriage window</span><span>${
+              r.window.nearest
+                ? `${Dasha.fmtDMY(r.window.nearest.startJd)} – ${Dasha.fmtDMY(r.window.nearest.endJd)}`
+                : '—'
+            }</span></div>
+            <p class="small muted">Shown because marital status is unmarried. See the Marriage Timing tab for full detail.</p></div>`
+        : `<div class="card"><h3>Marriage event timing (unmarried natives only)</h3>
+            <div class="kv"><span>Nearest marriage window</span><span>${esc(r.window.nearestRange || '—')}</span></div>
+            <p class="small muted">Shown because both partners are unmarried. See the Marriage Timing tab for full detail.</p></div>`)
+      : `<div class="card"><h3>Marriage event timing</h3>
+          <div class="callout">Marriage event timing is hidden when the native is married
+          (set marital status on the landing page). Childbirth / progeny timing below remains available.</div></div>`;
+
+    if (p.individual) {
+      const t = p.timing || {};
+      const near = t.nearest
+        ? `${Dasha.fmtDMY(t.nearest.startJd)} – ${Dasha.fmtDMY(t.nearest.endJd)}`
+        : '—';
+      let rows = '';
+      (t.top || []).slice(0, 6).forEach((w) => {
+        rows += `<tr><td>${Dasha.fmtDMY(w.startJd)} – ${Dasha.fmtDMY(w.endJd)}</td><td>${w.md}/${w.ad}/${w.pd}</td><td class="num">${fix(w.score, 1)}</td></tr>`;
+      });
+      $('tab-progeny').innerHTML = `
+        <div class="card"><h2>Progeny (Santāna) — ${esc(r.name || 'Native')}</h2>
+          <div class="big-score">${p.index}<small>/100</small></div>
+          <div style="margin-top:8px">${chip(p.verdict.label, p.verdict.cls)}</div>
+          <p class="small muted" style="margin-top:8px">Childbirth promise from the 5th house, KP and Beeja/Kṣetra sphuṭa.</p></div>
+        ${marriageBlock}
+        <div class="card"><h3>Nearest childbirth window</h3>
+          <div class="big-score" style="font-size:22px">${near}</div></div>
+        <div class="card"><h3>Strongest progeny periods</h3>
+          <table><thead><tr><th>Window</th><th>MD/AD/PD</th><th class="num">Score</th></tr></thead><tbody>${rows || '<tr><td colspan="3">—</td></tr>'}</tbody></table></div>`;
+      return;
+    }
+
+    const near = p.combinedNearest
+      ? `${Dasha.fmtDMY(p.combinedNearest.startJd)} – ${Dasha.fmtDMY(p.combinedNearest.endJd)}`
+      : '—';
+    $('tab-progeny').innerHTML = `
+      <div class="card"><h2>Progeny (Santāna) — Couple</h2>
+        <div class="big-score">${p.index}<small>/100</small></div>
+        <div style="margin-top:8px">${chip(p.verdict.label, p.verdict.cls)}</div>
+        ${(p.notes || []).map((n) => `<p class="small">• ${esc(n)}</p>`).join('')}</div>
+      ${marriageBlock}
+      <div class="card"><h3>Nearest joint childbirth window</h3>
+        <div class="big-score" style="font-size:22px">${near}</div>
+        <p class="small muted">Timed primarily from the wife's chart with support from the husband's periods.</p></div>
+      <div class="grid-2">
+        <div class="card"><h3>Husband promise</h3>
+          <div class="kv"><span>Index</span><span>${p.boy.index}/100 — ${esc(p.boy.verdict.label)}</span></div></div>
+        <div class="card"><h3>Wife promise</h3>
+          <div class="kv"><span>Index</span><span>${p.girl.index}/100 — ${esc(p.girl.verdict.label)}</span></div></div>
+      </div>`;
+  }
+
   /* ---------------- Timing ---------------- */
   function renderTiming() {
-    const r = state.results; const w = r.window;
+    const r = state.results;
+    if (!r.showMarriageTiming) {
+      $('tab-timing').innerHTML = marriageTimingSkippedHtml('Nearest Marriage Timing');
+      return;
+    }
+    const w = r.window;
     function topList(person, label) {
       let rows = '';
       person.topByScore.forEach((t) => {
@@ -1194,7 +1319,11 @@
           <tr><td>KP promise confidence</td><td>${r.kp.combined}% — ${r.kp.verdict.label}</td></tr>
           <tr><td>Health compatibility</td><td>${r.health.score}/100 — ${r.health.verdict.label}</td></tr>
           <tr><td>Sarvashtakavarga (SAV)</td><td>${r.sarvashtaka.score}/100 — ${r.sarvashtaka.verdict.label}</td></tr>
-          <tr><td>Nearest marriage window</td><td>${esc(r.window.nearestRange)}</td></tr>
+          <tr><td>Nearest marriage window</td><td>${
+            r.showMarriageTiming && r.window
+              ? esc(r.window.nearestRange)
+              : 'Not applicable (married)'
+          }</td></tr>
           ${r.koota.ashtakoota.doshas.length ? `<tr><td>Dosha alerts</td><td>${r.koota.ashtakoota.doshas.join(', ')}</td></tr>` : ''}
         </table>
         <div class="card" style="margin-top:14px"><h3>Birth Data</h3>${header(b)}${header(g)}</div>
