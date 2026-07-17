@@ -71,10 +71,10 @@ function pythonJson(result) {
   return NextResponse.json(result);
 }
 
-// Authenticates the request, failing closed. Returns { user } on success or
-// { error: <NextResponse> } to return. A thrown auth-configuration error (e.g.
-// AUTH_SECRET unset/default in production) becomes a clean JSON 500 rather than
-// an unhandled rejection; a missing/invalid token becomes a 401.
+// Authenticates the request. With the sign-in page removed, missing tokens fall
+// back to a local guest identity so chart/birth features keep working.
+const GUEST_USER = { name: 'Guest', email: 'guest@local' };
+
 function requireAuth(request) {
   let user;
   try {
@@ -83,7 +83,7 @@ function requireAuth(request) {
     return { error: NextResponse.json({ error: 'Authentication is not configured' }, { status: 500 }) };
   }
   if (!user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { user: GUEST_USER };
   }
   return { user };
 }
