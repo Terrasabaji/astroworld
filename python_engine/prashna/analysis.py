@@ -1,8 +1,8 @@
-"""Master Prashna analysis — Mooka + Manual (KP + Parashara)."""
+"""Master Prashna analysis — ONLY two types: Mooka and Manual."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .chart_builder import cast_prashna_chart
 from .constants import CATEGORY_HOUSES
@@ -10,6 +10,8 @@ from .kp_engine import KP_Engine
 from .mooka import deduce_mooka_question
 from .nlp import map_query_to_houses
 from .parashara_engine import Parashara_Engine
+
+VALID_MODES = frozenset({"mooka", "manual"})
 
 
 def _build_justification(
@@ -21,10 +23,12 @@ def _build_justification(
 ) -> str:
     parts = []
     if mode == "mooka":
-        parts.append(f"Mooka deduction: {query_block.get('deduced_query')}")
+        parts.append(f"Mooka Prashna deduced query: {query_block.get('deduced_query')}")
+        if query_block.get("notes"):
+            parts.append(" ".join(query_block["notes"]))
     else:
         parts.append(
-            f"Parsed query maps to {query_block.get('label')} "
+            f"Manual Prashna parsed query maps to {query_block.get('label')} "
             f"(primary house {query_block.get('primary_house')}; "
             f"keywords: {', '.join(query_block.get('keywords') or []) or 'none'})."
         )
@@ -47,42 +51,43 @@ def _build_justification(
         parts.append(al["note"])
 
     if timing.get("summary"):
-        parts.append(f"Timing: {timing['summary']}")
-
-    if promise.get("retrograde_planets"):
-        parts.append(
-            "Retrogression flagged for: "
-            + ", ".join(promise["retrograde_planets"])
-            + "."
-        )
+        parts.append(f"Timing (DBA/RPs): {timing['summary']}")
 
     return " ".join(p for p in parts if p).strip()
 
 
 def run_prashna_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Master entry point.
+    Master entry point for Prashna.
 
-    input_data keys:
-      mode: "mooka" | "manual" | "instant" (instant treated as manual without question)
-      year, month, day, hour, minute, second
-      latitude, longitude, tz_offset | tz_name
-      question_text (manual)
-      category (optional hint)
-      horary_number (optional 1–249)
-      place, name, altitude (optional)
+    ONLY two modes are accepted:
+      - mooka  : silent question (timestamp + coordinates; no question text)
+      - manual : explicit question text + timestamp + coordinates
+                 (+ optional KP horary number 1–249)
 
-    Returns structured JSON with promise, timing, and justification.
+    Returns JSON with:
+      parsed_query / deduced_query,
+      the_promise_result (bool),
+      timing_prediction,
+      astrological_justification
     """
     mode = (input_data.get("mode") or "manual").lower().strip()
-    if mode == "instant":
-        mode = "manual"
+    if mode not in VALID_MODES:
+        raise ValueError(
+            "Prashna supports only two types: mode='mooka' or mode='manual'."
+        )
 
     chart = cast_prashna_chart(input_data)
     kp = KP_Engine(chart, input_data)
     para = Parashara_Engine(chart)
 
     if mode == "mooka":
+        # MODULE 1 — Silent Question
+        if (input_data.get("question_text") or input_data.get("question") or "").strip():
+            raise ValueError(
+                "Mooka Prashna must not include a question text. "
+                "Use mode='manual' for an explicit question."
+            )
         query_block = deduce_mooka_question(chart)
         parsed_query = None
         deduced_query = query_block.get("deduced_query")
@@ -92,32 +97,38 @@ def run_prashna_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         karaka = query_block["karaka"]
         category = query_block["category"]
     else:
-        qtext = input_data.get("question_text") or input_data.get("question") or ""
+        # MODULE 2 — Explicit Question
+        qtext = (input_data.get("question_text") or input_data.get("question") or "").strip()
         hint = input_data.get("category")
+        if not qtext and not (hint and hint in CATEGORY_HOUSES):
+            raise ValueError(
+                "Manual Prashna requires question_text (or a valid category hint)."
+            )
+
         query_block = map_query_to_houses(qtext, category_hint=hint)
-        # Allow explicit house override list
         if input_data.get("primary_house"):
             primary = int(input_data["primary_house"])
-            # synthesize from CATEGORY if possible
             matched = next(
                 (c for c, s in CATEGORY_HOUSES.items() if s["primary"] == primary),
                 None,
             )
             if matched:
+                spec = CATEGORY_HOUSES[matched]
                 query_block = {
                     **query_block,
-                    **CATEGORY_HOUSES[matched],
                     "category": matched,
+                    "label": spec["label"],
                     "primary_house": primary,
-                    "favorable_houses": list(CATEGORY_HOUSES[matched]["favorable"]),
-                    "denial_houses": list(CATEGORY_HOUSES[matched]["denial"]),
-                    "karaka": CATEGORY_HOUSES[matched]["karaka"],
+                    "favorable_houses": list(spec["favorable"]),
+                    "denial_houses": list(spec["denial"]),
+                    "karaka": spec["karaka"],
                     "question_text": qtext,
                 }
             else:
                 query_block["primary_house"] = primary
-                query_block["favorable_houses"] = [primary, 2, 11]
-                query_block["denial_houses"] = [((primary - 2) % 12) + 1, 8, 12]
+                query_block["favorable_houses"] = [primary, ((primary) % 12) + 1, 11]
+                query_block["denial_houses"] = [_twelfth(primary), 8, 12]
+
         parsed_query = {
             "question_text": qtext,
             "category": query_block.get("category"),
@@ -136,6 +147,7 @@ def run_prashna_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         karaka = query_block["karaka"]
         category = query_block.get("category")
 
+    # Shared KP + Parashara engines for both types
     promise = kp.evaluate_promise(primary, favorable, denial)
     timing = kp.timing_prediction(favorable, promise)
     parashara = para.evaluate(primary, karaka)
@@ -147,32 +159,25 @@ def run_prashna_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
         parashara,
     )
 
-    yes_no = "YES" if promise.get("the_promise_result") else "NO"
-    if promise.get("status") == "delayed_until_direct":
-        yes_no = "YES (delayed)"
-    elif promise.get("status") in ("mixed_lean_yes", "mixed_lean_no"):
-        yes_no = "MIXED — lean " + ("YES" if promise.get("the_promise_result") else "NO")
-
     return {
-        "mode": mode,
+        # Required master fields
         "parsed_query": parsed_query,
         "deduced_query": deduced_query,
+        "the_promise_result": bool(promise.get("the_promise_result")),
+        "timing_prediction": timing.get("summary"),
+        "astrological_justification": justification,
+        # Supporting detail
+        "mode": mode,
+        "prashna_type": "Mooka Prashna" if mode == "mooka" else "Manual Prashna",
         "category": category,
         "primary_house": primary,
-        "the_promise_result": bool(promise.get("the_promise_result")),
         "promise_status": promise.get("status"),
-        "yes_no": yes_no,
-        "timing_prediction": timing.get("summary"),
+        "delay_status": promise.get("delay_status"),
         "timing": timing,
-        "astrological_justification": justification,
         "kp": {
             "promise": promise,
             "ruling_planets": timing.get("ruling_planets"),
-            "four_fold_sample": {
-                name: kp.four_fold_significators(name)
-                for name in (promise.get("cuspal_sub_lord"), promise.get("csl_star_lord"))
-                if name
-            },
+            "four_fold_csl_star_lord": promise.get("four_fold_star_lord"),
             "node_proxies": {
                 "Rahu": kp.node_proxies("Rahu"),
                 "Ketu": kp.node_proxies("Ketu"),
@@ -214,3 +219,7 @@ def run_prashna_analysis(input_data: Dict[str, Any]) -> Dict[str, Any]:
             "engine": chart.raw.get("engine"),
         },
     }
+
+
+def _twelfth(house: int) -> int:
+    return ((house - 2) % 12) + 1

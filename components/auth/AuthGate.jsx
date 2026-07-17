@@ -194,6 +194,14 @@ export default function AuthGate({ children }) {
     );
   }
 
+  if (GUEST_ACCESS_ENABLED) {
+    return (
+      <AuthContext.Provider value={{ user: null, token: null, logout }}>
+        {children}
+      </AuthContext.Provider>
+    );
+  }
+
   if (user && token) {
     return (
       <AuthContext.Provider value={{ user, token, logout }}>

@@ -47,17 +47,15 @@ function nowParts(tzOffset = 5.5) {
   };
 }
 
-function VerdictBadge({ yesNo, promise }) {
-  const ok = promise === true || String(yesNo || '').toUpperCase().includes('YES');
-  const mixed = String(yesNo || '').toUpperCase().includes('MIXED');
-  const cls = mixed
-    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
-    : ok
-      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-      : 'bg-rose-500/15 text-rose-300 border-rose-500/40';
+function VerdictBadge({ promise, delayStatus }) {
+  const ok = promise === true;
+  const cls = ok
+    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+    : 'bg-rose-500/15 text-rose-300 border-rose-500/40';
   return (
     <span className={`inline-flex px-3 py-1 rounded-md border text-sm font-semibold ${cls}`}>
-      {yesNo || (promise ? 'YES' : 'NO')}
+      {ok ? 'YES' : 'NO'}
+      {delayStatus ? ` · ${delayStatus}` : ''}
     </span>
   );
 }
@@ -149,22 +147,32 @@ export default function PrashnaPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-100">Prashna (Horary)</h1>
         <p className="text-sm text-slate-400 mt-1">
-          KP + Parashara engine powered by Swiss Ephemeris — Mooka (silent) and Manual questions.
+          Exactly two types — <span className="text-saffron-300">Mooka</span> (silent) and{' '}
+          <span className="text-saffron-300">Manual</span> (explicit question). KP promise + Parashara context via Swiss Ephemeris.
         </p>
       </div>
 
-      <Tabs value={mode} onValueChange={setMode}>
+      <Tabs
+        value={mode}
+        onValueChange={(next) => {
+          setMode(next);
+          setReport(null);
+          setError(null);
+          if (next === 'mooka') setForm((f) => ({ ...f, question_text: '' }));
+        }}
+      >
         <TabsList className="bg-slate-900 border border-slate-800">
-          <TabsTrigger value="manual">Manual Prashna</TabsTrigger>
-          <TabsTrigger value="mooka">Mooka Prashna</TabsTrigger>
+          <TabsTrigger value="mooka">1. Mooka Prashna</TabsTrigger>
+          <TabsTrigger value="manual">2. Manual Prashna</TabsTrigger>
         </TabsList>
 
         <TabsContent value="manual" className="mt-4 space-y-4">
           <Card className="bg-slate-900/60 border-slate-800">
             <CardHeader className="pb-2">
-              <CardTitle className="text-slate-100 text-base">Explicit question</CardTitle>
+              <CardTitle className="text-slate-100 text-base">Manual Prashna — explicit question</CardTitle>
               <CardDescription>
-                Enter the query text. Keywords map to houses (e.g. marriage → 7). Optional KP number 1–249.
+                Required: question text, timestamp, coordinates. Optional: KP horary number (1–249).
+                Keywords map to primary houses (e.g. marriage → 7th).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -211,9 +219,10 @@ export default function PrashnaPage() {
         <TabsContent value="mooka" className="mt-4">
           <Card className="bg-slate-900/60 border-slate-800">
             <CardHeader className="pb-2">
-              <CardTitle className="text-slate-100 text-base">Silent query</CardTitle>
+              <CardTitle className="text-slate-100 text-base">Mooka Prashna — silent question</CardTitle>
               <CardDescription>
-                No question text. The chart deduces the concern from Moon lords and Lagna sub-lord.
+                Required: timestamp and coordinates only. Do not enter a question.
+                Deduction uses Moon Sign/Star/Sub lords and Lagna Sub Lord significations.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -287,7 +296,7 @@ export default function PrashnaPage() {
             {loading ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analyzing…</>
             ) : (
-              <><Sparkles className="h-4 w-4 mr-2" />{mode === 'mooka' ? 'Analyze Silent Query' : 'Run Prashna'}</>
+              <><Sparkles className="h-4 w-4 mr-2" />{mode === 'mooka' ? 'Run Mooka Prashna' : 'Run Manual Prashna'}</>
             )}
           </Button>
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -299,26 +308,33 @@ export default function PrashnaPage() {
           <Card className="bg-slate-900/60 border-slate-800">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle className="text-slate-100 text-base">Judgement</CardTitle>
-                <VerdictBadge yesNo={report.yes_no} promise={report.the_promise_result} />
+                <CardTitle className="text-slate-100 text-base">
+                  {report.prashna_type || (report.mode === 'mooka' ? 'Mooka Prashna' : 'Manual Prashna')}
+                </CardTitle>
+                <VerdictBadge promise={report.the_promise_result} delayStatus={report.delay_status} />
               </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               {report.deduced_query && (
-                <p><span className="text-slate-500">Deduced query:</span> <span className="text-saffron-200">{report.deduced_query}</span></p>
+                <p><span className="text-slate-500">deduced_query:</span> <span className="text-saffron-200">{report.deduced_query}</span></p>
               )}
               {report.parsed_query && (
                 <p>
-                  <span className="text-slate-500">Parsed:</span>{' '}
+                  <span className="text-slate-500">parsed_query:</span>{' '}
                   <span className="text-slate-200">{report.parsed_query.question_text || '—'}</span>
                   {' · '}
                   <span className="text-saffron-300">{report.parsed_query.label}</span>
                   {' · H'}{report.primary_house}
                 </p>
               )}
-              <p><span className="text-slate-500">Promise:</span> <span className="text-slate-100">{String(report.the_promise_result)}</span> <span className="text-slate-500">({report.promise_status})</span></p>
-              <p><span className="text-slate-500">Timing:</span> <span className="text-slate-200">{report.timing_prediction}</span></p>
+              <p>
+                <span className="text-slate-500">the_promise_result:</span>{' '}
+                <span className="text-slate-100 font-semibold">{String(report.the_promise_result)}</span>
+                {report.delay_status && <span className="text-amber-300"> · {report.delay_status}</span>}
+              </p>
+              <p><span className="text-slate-500">timing_prediction:</span> <span className="text-slate-200">{report.timing_prediction}</span></p>
               <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-slate-300 leading-relaxed">
+                <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">astrological_justification</p>
                 {report.astrological_justification}
               </div>
             </CardContent>

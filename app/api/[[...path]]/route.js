@@ -361,9 +361,16 @@ export async function POST(request, { params }) {
   if (seg === 'prashna/analyze') {
     try {
       const body = await request.json();
+      const mode = String(body.mode || 'manual').toLowerCase();
+      if (mode !== 'mooka' && mode !== 'manual') {
+        return NextResponse.json(
+          { error: "Prashna supports only two types: mode='mooka' or mode='manual'." },
+          { status: 400 },
+        );
+      }
       const payload = {
         ...normalizeCalculateBody(body),
-        mode: body.mode || 'manual',
+        mode,
         question_text: body.question_text || body.question || '',
         category: body.category || undefined,
         horary_number: body.horary_number ?? body.horaryNumber ?? undefined,
