@@ -11,6 +11,7 @@ export function useAuth() {
 
 const TOKEN_KEY = 'astro-world-token';
 const USER_KEY = 'astro-world-user';
+const GUEST_ACCESS_ENABLED = process.env.NEXT_PUBLIC_GUEST_ACCESS === 'true';
 
 // Mask an email for display, e.g. priya@example.com -> pr***@example.com
 function maskEmail(email) {
@@ -190,6 +191,14 @@ export default function AuthGate({ children }) {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-slate-400 text-sm">Loading...</div>
       </div>
+    );
+  }
+
+  if (GUEST_ACCESS_ENABLED) {
+    return (
+      <AuthContext.Provider value={{ user: null, token: null, logout }}>
+        {children}
+      </AuthContext.Provider>
     );
   }
 
