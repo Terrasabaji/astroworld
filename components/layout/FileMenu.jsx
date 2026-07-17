@@ -10,6 +10,7 @@ import BirthEditorDialog from '@/components/birth/BirthEditorDialog';
 import OpenBirthDialog from '@/components/birth/OpenBirthDialog';
 import { birthFormToPayload } from '@/components/birth/BirthForm';
 import { birthRecordToForm } from '@/lib/birth-session';
+import { authHeaders } from '@/lib/api-client';
 
 export default function FileMenu() {
   const { birth, setBirth } = useBirthSession();
@@ -41,7 +42,10 @@ export default function FileMenu() {
       };
       const res = await fetch('/api/births', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
         body: JSON.stringify(payload),
       });
       const saved = await res.json();
@@ -71,7 +75,10 @@ export default function FileMenu() {
       };
       const res = await fetch('/api/births', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
         body: JSON.stringify(payload),
       });
       const saved = await res.json();

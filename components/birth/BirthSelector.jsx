@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
+import { authHeaders } from '@/lib/api-client';
 
 /** Dropdown to load a saved birth record into a parent form */
 export default function BirthSelector({ onSelect, updateSession = true }) {
@@ -11,7 +12,7 @@ export default function BirthSelector({ onSelect, updateSession = true }) {
   const [births, setBirths] = useState([]);
 
   useEffect(() => {
-    fetch('/api/births')
+    fetch('/api/births', { headers: authHeaders() })
       .then((r) => r.json())
       .then((d) => setBirths(d.births || []))
       .catch(() => {});
@@ -19,7 +20,7 @@ export default function BirthSelector({ onSelect, updateSession = true }) {
 
   const handleSelect = async (id) => {
     if (!id || id === '_none') return;
-    const res = await fetch(`/api/births/${id}`);
+    const res = await fetch(`/api/births/${id}`, { headers: authHeaders() });
     const birth = await res.json();
     if (updateSession) setSessionBirth(birth);
     onSelect?.(birth);

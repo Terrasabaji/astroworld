@@ -37,6 +37,21 @@ Python dependencies:
 
 Ephemeris data files ship in the [`ephe/`](ephe/) folder, so no extra download is needed.
 
+### 3. Seed sample data (optional)
+
+Real user and birth records under `data/` are **not** tracked (they contain
+PII). To populate a fresh checkout with anonymized sample fixtures so you can
+exercise the auth and birth flows, run:
+
+```bash
+node scripts/seed-data.mjs
+```
+
+This copies the fixtures from [`data/seed/`](data/seed/) into `data/users/`,
+`data/births/`, and writes `data/users-master.json` (only if missing/empty).
+It is idempotent — existing files are left untouched. The seeded users have a
+fixed OTP of `123456` (with `AUTH_BYPASS_OTP=true` any OTP is accepted in dev).
+
 ## Running the app (development)
 
 The Next.js API spawns Python for calculations. Point it at the interpreter that has

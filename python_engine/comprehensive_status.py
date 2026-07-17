@@ -483,7 +483,7 @@ def build_comprehensive_report(
     cur_pd = next((p for p in dasha.get("pds") or [] if p.get("current")), None)
 
     return {
-        "generated_at": generated_at or dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "generated_at": generated_at or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None).replace(microsecond=0).isoformat() + "Z",
         "native_name": native_name,
         "summary": {
             "headline": f"Comprehensive status for {native_name}",

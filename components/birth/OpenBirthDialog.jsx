@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Loader2, User, FolderOpen, Upload } from 'lucide-react';
 import { birthRecordToForm } from '@/lib/birth-session';
+import { authHeaders } from '@/lib/api-client';
 
 function validateBirthFile(data) {
   if (!data || typeof data !== 'object') throw new Error('Invalid chart file');
@@ -34,7 +35,7 @@ export default function OpenBirthDialog({ open, onOpenChange, onOpen }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/births');
+      const res = await fetch('/api/births', { headers: authHeaders() });
       const data = await res.json();
       setBirths(data.births || []);
     } catch {
@@ -52,7 +53,7 @@ export default function OpenBirthDialog({ open, onOpenChange, onOpen }) {
     setOpeningId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/births/${id}`);
+      const res = await fetch(`/api/births/${id}`, { headers: authHeaders() });
       const record = await res.json();
       if (record.error) throw new Error(record.error);
       onOpen?.(birthRecordToForm(record));
