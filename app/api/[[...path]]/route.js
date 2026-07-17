@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { searchCities } from '@/lib/cities-search';
+import { searchCities, nearestCity } from '@/lib/cities-search';
 import { listBirths, getBirth, saveBirth, deleteBirth } from '@/lib/births';
 import { registerUser, verifyOTP, getUser, authenticateRequest } from '@/lib/auth';
 
@@ -121,6 +121,20 @@ export async function GET(request, { params }) {
 
   if (seg === 'health') {
     return NextResponse.json({ status: 'ok', engine: 'swisseph-python' });
+  }
+  if (seg === 'cities/nearest') {
+    const lat = parseFloat(request.nextUrl.searchParams.get('lat'));
+    const lon = parseFloat(request.nextUrl.searchParams.get('lon'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return NextResponse.json({ error: 'lat and lon are required' }, { status: 400 });
+    }
+    try {
+      const city = nearestCity(lat, lon);
+      if (!city) return NextResponse.json({ error: 'No city found' }, { status: 404 });
+      return NextResponse.json({ city, latitude: lat, longitude: lon });
+    } catch (e) {
+      return NextResponse.json({ error: e.message }, { status: 500 });
+    }
   }
   if (seg === 'cities') {
     const q = request.nextUrl.searchParams.get('q') || '';

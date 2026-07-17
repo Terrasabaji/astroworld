@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Sparkles } from 'lucide-react';
 import { useModuleBirth } from '@/components/birth/BirthSessionProvider';
+import PlaceAutocomplete from '@/components/birth/PlaceAutocomplete';
 import { nativeBirth } from '@/lib/birth-session';
 
 const CATEGORIES = [
@@ -80,21 +81,31 @@ export default function PrashnaPage() {
   const [error, setError] = useState(null);
   const [report, setReport] = useState(null);
 
+  // Seed from saved birth place only when empty; geolocation / city pick override.
   useEffect(() => {
     if (!hydrated) return;
-    setForm((f) => ({
-      ...f,
-      latitude: native.latitude,
-      longitude: native.longitude,
-      tz_offset: native.tz_offset ?? f.tz_offset,
-      tz_name: native.tz_name || f.tz_name,
-      place: native.place || f.place,
-    }));
+    setForm((f) => {
+      if (f.place || (f.latitude !== '' && f.latitude != null && f.longitude !== '' && f.longitude != null)) {
+        return f;
+      }
+      return {
+        ...f,
+        latitude: native.latitude ?? f.latitude,
+        longitude: native.longitude ?? f.longitude,
+        tz_offset: native.tz_offset ?? f.tz_offset,
+        tz_name: native.tz_name || f.tz_name,
+        place: native.place || f.place,
+      };
+    });
   }, [hydrated, native.latitude, native.longitude, native.tz_offset, native.tz_name, native.place]);
 
   const update = (key) => (e) => {
     const v = e?.target ? e.target.value : e;
     setForm((f) => ({ ...f, [key]: v }));
+  };
+
+  const onPlaceChange = (patch) => {
+    setForm((f) => ({ ...f, ...patch }));
   };
 
   const useNow = () => {
@@ -268,11 +279,22 @@ export default function PrashnaPage() {
               <Input type="number" value={form.second} onChange={update('second')} className="mt-1 bg-slate-950 border-slate-700" />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <div className="md:col-span-1">
-              <Label className="text-slate-400 text-xs">Place</Label>
-              <Input value={form.place} onChange={update('place')} className="mt-1 bg-slate-950 border-slate-700" />
-            </div>
+          <PlaceAutocomplete
+            place={form.place}
+            latitude={form.latitude}
+            longitude={form.longitude}
+            tz_offset={form.tz_offset}
+            tz_name={form.tz_name}
+            year={form.year}
+            month={form.month}
+            day={form.day}
+            hour={form.hour}
+            minute={form.minute}
+            onChange={onPlaceChange}
+            autoDetect
+            label="Place of query"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             <div>
               <Label className="text-slate-400 text-xs">Latitude</Label>
               <Input type="number" step="any" value={form.latitude} onChange={update('latitude')} className="mt-1 bg-slate-950 border-slate-700 font-mono" />
@@ -286,6 +308,9 @@ export default function PrashnaPage() {
               <Input type="number" step="0.25" value={form.tz_offset} onChange={update('tz_offset')} className="mt-1 bg-slate-950 border-slate-700 font-mono" />
             </div>
           </div>
+          {form.tz_name && (
+            <p className="text-[10px] text-slate-500 font-mono">IANA: {form.tz_name}</p>
+          )}
 
           <Button
             type="button"

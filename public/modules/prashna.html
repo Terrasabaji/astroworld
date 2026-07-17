@@ -4365,6 +4365,7 @@
             '</div>' +
           '</details>' +
         '</div>' +
+        '<div id="' + prefix + '-geo" class="form-msg info"></div>' +
         '<button type="button" class="btn-primary" id="' + prefix + '-analyze">Analyze Prashna</button>' +
         '<div id="' + prefix + '-error" class="form-msg error"></div>' +
       '</div>';
@@ -4906,9 +4907,20 @@
     if (tEl) tEl.value = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   }
 
-  // Request geolocation for a form prefix and fill {prefix}-lat/-lon/-tz,
-  // writing status into {prefix}-geo. Used by the Mooka tab; every field
-  // stays editable so the user can confirm or change it.
+  // Nearest city from the offline table (squared degree distance).
+  function nearestOfflineCity(lat, lon) {
+    let best = null;
+    let bestD = Infinity;
+    for (let i = 0; i < ui.CITIES.length; i++) {
+      const c = ui.CITIES[i];
+      const d = (c.lat - lat) * (c.lat - lat) + (c.lon - lon) * (c.lon - lon);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+  }
+
+  // Request geolocation for a form prefix and fill place + lat/lon/tz,
+  // writing status into {prefix}-geo. Every field stays editable.
   function requestLocationFor(prefix) {
     const geoEl = $(prefix + '-geo');
     const tz = -(new Date().getTimezoneOffset()) / 60;
@@ -4921,14 +4933,38 @@
     showMsg(geoEl, 'Detecting the current location\u2026', 'info');
     navigator.geolocation.getCurrentPosition(
       function (pos) {
-        if ($(prefix + '-lat')) $(prefix + '-lat').value = pos.coords.latitude.toFixed(6);
-        if ($(prefix + '-lon')) $(prefix + '-lon').value = pos.coords.longitude.toFixed(6);
-        if ($(prefix + '-tz') && !$(prefix + '-tz').value) $(prefix + '-tz').value = tz;
-        showMsg(geoEl, 'Location detected. Verify the date, time and place below, then analyze.', 'info');
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        if ($(prefix + '-lat')) $(prefix + '-lat').value = lat.toFixed(6);
+        if ($(prefix + '-lon')) $(prefix + '-lon').value = lon.toFixed(6);
+        if ($(prefix + '-tz')) $(prefix + '-tz').value = tz;
+        const near = nearestOfflineCity(lat, lon);
+        if (near && $(prefix + '-city')) {
+          $(prefix + '-city').value = near.name;
+          if ($(prefix + '-tz')) $(prefix + '-tz').value = near.tz;
+        }
+        // Prefer the full GeoNames nearest city when the suite API is available.
+        try {
+          fetch('/api/cities/nearest?lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data && data.city && $(prefix + '-city')) {
+                const c = data.city;
+                const label = [c.n, c.a, c.c].filter(Boolean).join(', ');
+                $(prefix + '-city').value = label;
+              }
+              showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+            })
+            .catch(function () {
+              showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+            });
+        } catch (e) {
+          showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+        }
       },
       function () {
         showMsg(geoEl, 'Location access was denied or unavailable. Please enter the latitude, ' +
-          'longitude and timezone manually below.', 'info');
+          'longitude and timezone manually below, or type a city for autocomplete.', 'info');
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
     );
