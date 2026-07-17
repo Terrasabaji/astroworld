@@ -229,7 +229,7 @@ def vimshottari_dasha(moon_long, birth_dt_utc):
         cur_start = end
 
     # Find current MD based on today's UTC
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     current_md_idx = None
     for i, md in enumerate(mds):
         s = datetime.datetime.fromisoformat(md["start"])

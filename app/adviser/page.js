@@ -199,7 +199,17 @@ function AdviceSection({ advice, isCareer, linked }) {
                 <p className="text-amber-300 font-medium">{r.planet}</p>
                 <p className="text-slate-400 text-xs">{r.reason}</p>
                 <ul className="text-slate-500 text-xs mt-1 list-disc pl-4">
-                  {(r.measures || []).map((m, j) => <li key={j}>{m}</li>)}
+                  {(Array.isArray(r.measures)
+                    ? r.measures.map((m, j) => [String(j), m])
+                    : Object.entries(r.measures || {})
+                  ).map(([k, m]) => (
+                    <li key={k}>
+                      {Array.isArray(r.measures) ? null : (
+                        <span className="text-slate-400 capitalize">{k}: </span>
+                      )}
+                      {typeof m === 'string' ? m : JSON.stringify(m)}
+                    </li>
+                  ))}
                 </ul>
               </div>
             ))}

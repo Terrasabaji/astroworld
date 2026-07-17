@@ -271,7 +271,7 @@ def compute_chara_dasha(ascendant, planets_list, birth_dt_utc):
         })
         cur_start = end
 
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     current_md_idx = None
     for i, md in enumerate(mds):
         s = datetime.datetime.fromisoformat(md["start"])

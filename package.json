@@ -9,7 +9,11 @@
         "build": "next build",
         "start": "next start",
         "start:standalone": "node scripts/start-standalone.js",
-        "build:windows": "bash packaging/windows/build-release.sh"
+        "build:windows": "bash packaging/windows/build-release.sh",
+        "test": "node tests/auth.test.mjs"
+    },
+    "engines": {
+        "node": ">=20.17"
     },
     "dependencies": {
         "@hookform/resolvers": "5.1.1",

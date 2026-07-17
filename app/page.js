@@ -19,6 +19,7 @@ import { birthFormToPayload } from '@/components/birth/BirthForm';
 import OpenBirthDialog, { OpenBirthButton } from '@/components/birth/OpenBirthDialog';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
 import { nativeBirth, GENDER_OPTIONS, normalizeGender } from '@/lib/birth-session';
+import { authHeaders } from '@/lib/api-client';
 
 // Country code -> readable name via browser's Intl.DisplayNames (no data shipped)
 function countryName(code) {
@@ -218,7 +219,7 @@ export default function Home() {
       };
       const res = await fetch('/api/births', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(payload),
       });
       const saved = await res.json();

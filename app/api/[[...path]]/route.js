@@ -33,13 +33,21 @@ function resolvePythonExecutable() {
 
 function runPython(script, payload) {
   return new Promise((resolve, reject) => {
+    const timeoutMs = parseInt(process.env.ASTRO_WORLD_PYTHON_TIMEOUT_MS, 10) || 90000;
     const py = spawn(resolvePythonExecutable(), [script], { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
+    const timer = setTimeout(() => {
+      py.kill('SIGKILL');
+      const e = new Error('Calculation timed out');
+      e.code = 'PYTHON_TIMEOUT';
+      reject(e);
+    }, timeoutMs);
     py.stdout.on('data', (d) => { out += d.toString(); });
     py.stderr.on('data', (d) => { err += d.toString(); });
-    py.on('error', reject);
+    py.on('error', (e) => { clearTimeout(timer); reject(e); });
     py.on('close', (code) => {
+      clearTimeout(timer);
       if (out) {
         try { return resolve(JSON.parse(out)); } catch { /* fallthrough */ }
       }
@@ -48,6 +56,13 @@ function runPython(script, payload) {
     py.stdin.write(JSON.stringify(payload));
     py.stdin.end();
   });
+}
+
+function pythonErrorResponse(e) {
+  if (e.code === 'PYTHON_TIMEOUT') {
+    return NextResponse.json({ error: 'Calculation timed out' }, { status: 504 });
+  }
+  return NextResponse.json({ error: e.message }, { status: 500 });
 }
 
 function normalizeCalculateBody(body) {
@@ -87,15 +102,23 @@ export async function GET(request, { params }) {
     }
   }
   if (seg === 'births') {
+    const user = authenticateRequest(request);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     try {
-      return NextResponse.json({ births: await listBirths() });
+      return NextResponse.json({ births: await listBirths(user.email) });
     } catch (e) {
       return NextResponse.json({ error: e.message }, { status: 500 });
     }
   }
   if (parts[0] === 'births' && parts[1]) {
+    const user = authenticateRequest(request);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     try {
-      return NextResponse.json(await getBirth(parts[1]));
+      const birth = await getBirth(parts[1]);
+      if (birth.owner_email && birth.owner_email !== user.email.toLowerCase().trim()) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+      return NextResponse.json(birth);
     } catch (e) {
       return NextResponse.json({ error: e.message }, { status: 404 });
     }
@@ -129,7 +152,7 @@ export async function GET(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -142,7 +165,7 @@ export async function GET(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -218,17 +241,16 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
   if (seg === 'births') {
+    const user = authenticateRequest(request);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     try {
       const body = await request.json();
-      // Extract user email from auth token if present
-      const user = authenticateRequest(request);
-      const userEmail = user ? user.email : undefined;
-      const saved = await saveBirth(body, userEmail);
+      const saved = await saveBirth(body, user.email);
       return NextResponse.json(saved);
     } catch (e) {
       return NextResponse.json({ error: e.message }, { status: 400 });
@@ -242,7 +264,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -253,7 +275,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -264,7 +286,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -280,7 +302,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -291,7 +313,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -302,7 +324,7 @@ export async function POST(request, { params }) {
       if (result.error) return NextResponse.json(result, { status: 400 });
       return NextResponse.json(result);
     } catch (e) {
-      return NextResponse.json({ error: e.message }, { status: 500 });
+      return pythonErrorResponse(e);
     }
   }
 
@@ -313,7 +335,13 @@ export async function DELETE(request, { params }) {
   const resolved = (await params) || {};
   const parts = resolved.path || [];
   if (parts[0] === 'births' && parts[1]) {
+    const user = authenticateRequest(request);
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     try {
+      const birth = await getBirth(parts[1]);
+      if (birth.owner_email && birth.owner_email !== user.email.toLowerCase().trim()) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
       return NextResponse.json(await deleteBirth(parts[1]));
     } catch (e) {
       return NextResponse.json({ error: e.message }, { status: 404 });

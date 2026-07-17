@@ -30,3 +30,11 @@ __pycache__/
 
 # Packaging
 packaging/
+
+# Local data (real user/birth PII — never track). Seed fixtures live in data/seed/.
+data/users/*.json
+!data/users/.gitkeep
+data/births/*.json
+!data/births/.gitkeep
+data/users-master.json
+python_engine/.venv/

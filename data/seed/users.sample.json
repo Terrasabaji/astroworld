@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Sample User",
+    "mobile": "9000000001",
+    "email": "sample.user@example.com",
+    "otp": "123456",
+    "otp_created_at": "2026-01-01T00:00:00.000Z",
+    "registered_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "name": "Demo Astrologer",
+    "mobile": "9000000002",
+    "email": "demo.astrologer@example.com",
+    "otp": "123456",
+    "otp_created_at": "2026-01-01T00:00:00.000Z",
+    "registered_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  }
+]

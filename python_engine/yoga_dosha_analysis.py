@@ -280,7 +280,7 @@ def _expand_dasha_periods(chart: dict, lords: Set[str], ctx: dict = None, sb=Non
     mds = chart.get("dasha", {}).get("mds", [])
     if not mds:
         return []
-    now = dt.datetime.utcnow()
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     end_limit = now + dt.timedelta(days=years_ahead * 365)
     periods = []
     for md in mds:
@@ -358,7 +358,7 @@ def _sade_sati_timeline(chart: dict, span_years: int = 90) -> List[dict]:
                     "phase": last_phase,
                     "start": phase_start.date().isoformat(),
                     "end": cur.date().isoformat(),
-                    "active_now": phase_start <= dt.datetime.utcnow() < cur,
+                    "active_now": phase_start <= dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) < cur,
                 })
             phase_start = cur
             last_phase = phase
@@ -368,7 +368,7 @@ def _sade_sati_timeline(chart: dict, span_years: int = 90) -> List[dict]:
             "phase": last_phase,
             "start": phase_start.date().isoformat(),
             "end": end.date().isoformat(),
-            "active_now": phase_start <= dt.datetime.utcnow() < end,
+            "active_now": phase_start <= dt.datetime.now(dt.timezone.utc).replace(tzinfo=None) < end,
         })
     return [p for p in phases if p["phase"] in ("rising", "peak", "setting", "ardha_ashtama", "ashtama_shani")]
 
