@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { searchCities } from '@/lib/cities-search';
+import { searchCities, nearestCity } from '@/lib/cities-search';
 import { listBirths, getBirth, saveBirth, deleteBirth } from '@/lib/births';
 import { registerUser, verifyOTP, getUser, authenticateRequest } from '@/lib/auth';
 
@@ -16,6 +16,7 @@ const PY_COMPREHENSIVE = path.join(process.cwd(), 'python_engine', 'run_comprehe
 const PY_MUHURTA = path.join(process.cwd(), 'python_engine', 'run_muhurta.py');
 const PY_YOGA_DOSHA = path.join(process.cwd(), 'python_engine', 'run_yoga_dosha.py');
 const PY_PANCHANGA = path.join(process.cwd(), 'python_engine', 'run_panchanga.py');
+const PY_PRASHNA = path.join(process.cwd(), 'python_engine', 'run_prashna.py');
 
 function resolvePythonExecutable() {
   if (process.env.ASTRO_WORLD_PYTHON) {
@@ -121,6 +122,20 @@ export async function GET(request, { params }) {
   if (seg === 'health') {
     return NextResponse.json({ status: 'ok', engine: 'swisseph-python' });
   }
+  if (seg === 'cities/nearest') {
+    const lat = parseFloat(request.nextUrl.searchParams.get('lat'));
+    const lon = parseFloat(request.nextUrl.searchParams.get('lon'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return NextResponse.json({ error: 'lat and lon are required' }, { status: 400 });
+    }
+    try {
+      const city = nearestCity(lat, lon);
+      if (!city) return NextResponse.json({ error: 'No city found' }, { status: 404 });
+      return NextResponse.json({ city, latitude: lat, longitude: lon });
+    } catch (e) {
+      return NextResponse.json({ error: e.message }, { status: 500 });
+    }
+  }
   if (seg === 'cities') {
     const q = request.nextUrl.searchParams.get('q') || '';
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '12'), 30);
@@ -217,6 +232,7 @@ export async function GET(request, { params }) {
       'GET /api/muhurta/events',
       'GET /api/panchanga',
       'POST /api/yoga-dosha/analyze',
+      'POST /api/prashna/analyze',
       'GET /api/cities?q=',
     ],
   });
@@ -354,6 +370,33 @@ export async function POST(request, { params }) {
         name: body.name || undefined,
         marital_status: body.marital_status || undefined,
       });
+      return pythonJson(result);
+    } catch (e) {
+      return pythonErrorResponse(e);
+    }
+  }
+
+  if (seg === 'prashna/analyze') {
+    try {
+      const body = await request.json();
+      const mode = String(body.mode || 'manual').toLowerCase();
+      if (mode !== 'mooka' && mode !== 'manual') {
+        return NextResponse.json(
+          { error: "Prashna supports only two types: mode='mooka' or mode='manual'." },
+          { status: 400 },
+        );
+      }
+      const payload = {
+        ...normalizeCalculateBody(body),
+        mode,
+        question_text: body.question_text || body.question || '',
+        category: body.category || undefined,
+        horary_number: body.horary_number ?? body.horaryNumber ?? undefined,
+        primary_house: body.primary_house || undefined,
+        name: body.name || 'Querent',
+        altitude: body.altitude || 0,
+      };
+      const result = await runPython(PY_PRASHNA, payload);
       return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);

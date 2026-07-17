@@ -582,7 +582,6 @@
 
     <nav class="tab-bar" role="tablist" aria-label="Prashna mode">
       <button type="button" role="tab" id="tab-manual" class="active" aria-selected="true">Manual Prashna</button>
-      <button type="button" role="tab" id="tab-instant" aria-selected="false">Instant Prashna</button>
       <button type="button" role="tab" id="tab-mooka" aria-selected="false">Mooka Prashna</button>
       <button type="button" role="tab" id="tab-print" aria-selected="false">Print Report</button>
     </nav>
@@ -3158,15 +3157,15 @@
    * ===================================================================== */
   const usage = KPApp.usage;
 
-  // The canonical analysis modes we track separately.
-  usage.MODES = ['manual', 'instant', 'mooka'];
+  // The canonical analysis modes we track separately (only two Prashna types).
+  usage.MODES = ['manual', 'mooka'];
 
   // A fresh, empty statistics object. Always a brand-new object so callers
   // can safely mutate the copies they own.
   usage.emptyStats = function emptyStats() {
     return {
       total: 0,
-      byMode: { manual: 0, instant: 0, mooka: 0 },
+      byMode: { manual: 0, mooka: 0 },
       byCategory: {},
       byQuestion: {},
       firstUsedAt: null,
@@ -3293,7 +3292,7 @@
   /* =====================================================================
    * UI LAYER  (KPApp.ui)
    * ---------------------------------------------------------------------
-   * Builds the Manual / Instant Prashna forms, validates input, runs the
+   * Builds the Manual Prashna form, validates input, runs the
    * full pipeline (astro.localToJD -> kp.buildChart -> interpret.interpret)
    * and renders the result cards. Pure helpers (runAnalysis,
    * buildResultsHtml) are DOM-free so the pipeline is verifiable in Node.
@@ -3870,7 +3869,7 @@
     row('Latitude', esc(input.lat.toFixed(6)) + '&deg;');
     row('Longitude', esc(input.lon.toFixed(6)) + '&deg;');
     row('Timezone', 'UTC' + (input.tz >= 0 ? '+' : '') + input.tz);
-    row('Mode', esc(chart.meta.mode === 'instant' ? 'Instant Prashna' : (chart.meta.mode === 'mooka' ? 'Mooka Prashna (Silent Query)' : 'Manual Prashna')));
+    row('Mode', esc(chart.meta.mode === 'mooka' ? 'Mooka Prashna (Silent Query)' : 'Manual Prashna'));
     row('Ayanamsa (KP)', ui.fmtDeg(chart.ayanamsa).replace(/ [A-Za-z]+$/, '') + ' (' + chart.ayanamsa.toFixed(4) + '&deg;)');
     row('Weekday', esc(weekdayName(chart.meta.weekday)));
     row('Query', esc(input.questionText ? input.questionText : categoryLabel(input.category)));
@@ -4070,8 +4069,8 @@
   // a PDF via the browser's native dialog.
   function buildPrintPaneHtml() {
     return card('Print Report',
-      '<p class="hint">Generate a report in the <strong>Manual</strong>, ' +
-      '<strong>Instant</strong> or <strong>Mooka Prashna</strong> tab first, then ' +
+      '<p class="hint">Generate a report in the <strong>Manual</strong> or ' +
+      '<strong>Mooka Prashna</strong> tab first, then ' +
       'return here to print it. In the print dialog, choose <strong>"Save as PDF"</strong> ' +
       'as the destination to save the report as a PDF file. Enable ' +
       '<strong>"Background graphics"</strong> in the dialog options to keep the colours.</p>' +
@@ -4093,7 +4092,6 @@
 
     body += '<p class="usage-modes"><strong>By mode</strong> &mdash; ' +
       'Manual: ' + esc(String(s.byMode.manual || 0)) + ' &middot; ' +
-      'Instant: ' + esc(String(s.byMode.instant || 0)) + ' &middot; ' +
       'Mooka: ' + esc(String(s.byMode.mooka || 0)) + '</p>';
 
     const top = usage.topQuestions(s, 5);
@@ -4289,18 +4287,8 @@
       '</datalist>';
   }
 
-  // Build a form (manual or instant) with id-prefixed fields.
-  function buildFormHtml(prefix, mode) {
-    const isInstant = (mode === 'instant');
-    const btnLabel = isInstant ? 'Analyze Prashna (Now)' : 'Analyze Prashna';
-    const locHidden = isInstant ? '' : ''; // manual: location block always visible
-    const geoMsg = isInstant
-      ? '<div id="' + prefix + '-geo" class="form-msg info"></div>'
-      : '';
-    const cityHint = isInstant
-      ? 'Detected automatically; pick a city or edit the values below if needed.'
-      : 'Start typing a city to auto-fill latitude, longitude and timezone (all editable).';
-
+  // Build the Manual Prashna form with id-prefixed fields.
+  function buildFormHtml(prefix) {
     return '' +
       '<div class="card form-card" id="' + prefix + '-form">' +
         '<div class="form-grid">' +
@@ -4322,7 +4310,7 @@
               '<ul id="' + prefix + '-city-list" role="listbox" class="city-suggestions hidden"></ul>' +
               '<div id="' + prefix + '-city-note" class="city-note hidden"></div>' +
             '</div>' +
-            '<span class="hint">' + cityHint + '</span>' +
+            '<span class="hint">Start typing a city to auto-fill latitude, longitude and timezone (all editable).</span>' +
           '</div>' +
           '<fieldset class="loc-block" id="' + prefix + '-loc">' +
             '<legend>Location coordinates</legend>' +
@@ -4377,8 +4365,8 @@
             '</div>' +
           '</details>' +
         '</div>' +
-        geoMsg +
-        '<button type="button" class="btn-primary" id="' + prefix + '-analyze">' + btnLabel + '</button>' +
+        '<div id="' + prefix + '-geo" class="form-msg info"></div>' +
+        '<button type="button" class="btn-primary" id="' + prefix + '-analyze">Analyze Prashna</button>' +
         '<div id="' + prefix + '-error" class="form-msg error"></div>' +
       '</div>';
   }
@@ -4815,7 +4803,7 @@
 
   // Render rendered-report HTML into #results, wire the Print / Save as PDF
   // button to the browser's native print dialog, and smooth-scroll into view.
-  // Shared by the manual, instant and Mooka analyze handlers so the wiring
+  // Shared by the Manual and Mooka analyze handlers so the wiring
   // lives in exactly one place.
   ui.renderResults = function renderResults(html) {
     const results = $('results');
@@ -4919,9 +4907,20 @@
     if (tEl) tEl.value = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   }
 
-  // Request geolocation for a form prefix and fill {prefix}-lat/-lon/-tz,
-  // writing status into {prefix}-geo. Used by both the Instant and Mooka
-  // tabs; every field stays editable so the user can confirm or change it.
+  // Nearest city from the offline table (squared degree distance).
+  function nearestOfflineCity(lat, lon) {
+    let best = null;
+    let bestD = Infinity;
+    for (let i = 0; i < ui.CITIES.length; i++) {
+      const c = ui.CITIES[i];
+      const d = (c.lat - lat) * (c.lat - lat) + (c.lon - lon) * (c.lon - lon);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
+  }
+
+  // Request geolocation for a form prefix and fill place + lat/lon/tz,
+  // writing status into {prefix}-geo. Every field stays editable.
   function requestLocationFor(prefix) {
     const geoEl = $(prefix + '-geo');
     const tz = -(new Date().getTimezoneOffset()) / 60;
@@ -4934,30 +4933,41 @@
     showMsg(geoEl, 'Detecting the current location\u2026', 'info');
     navigator.geolocation.getCurrentPosition(
       function (pos) {
-        if ($(prefix + '-lat')) $(prefix + '-lat').value = pos.coords.latitude.toFixed(6);
-        if ($(prefix + '-lon')) $(prefix + '-lon').value = pos.coords.longitude.toFixed(6);
-        if ($(prefix + '-tz') && !$(prefix + '-tz').value) $(prefix + '-tz').value = tz;
-        showMsg(geoEl, 'Location detected. Verify the date, time and place below, then analyze.', 'info');
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        if ($(prefix + '-lat')) $(prefix + '-lat').value = lat.toFixed(6);
+        if ($(prefix + '-lon')) $(prefix + '-lon').value = lon.toFixed(6);
+        if ($(prefix + '-tz')) $(prefix + '-tz').value = tz;
+        const near = nearestOfflineCity(lat, lon);
+        if (near && $(prefix + '-city')) {
+          $(prefix + '-city').value = near.name;
+          if ($(prefix + '-tz')) $(prefix + '-tz').value = near.tz;
+        }
+        // Prefer the full GeoNames nearest city when the suite API is available.
+        try {
+          fetch('/api/cities/nearest?lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data && data.city && $(prefix + '-city')) {
+                const c = data.city;
+                const label = [c.n, c.a, c.c].filter(Boolean).join(', ');
+                $(prefix + '-city').value = label;
+              }
+              showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+            })
+            .catch(function () {
+              showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+            });
+        } catch (e) {
+          showMsg(geoEl, 'Location detected. Place and coordinates filled — verify, then analyze.', 'info');
+        }
       },
       function () {
         showMsg(geoEl, 'Location access was denied or unavailable. Please enter the latitude, ' +
-          'longitude and timezone manually below.', 'info');
+          'longitude and timezone manually below, or type a city for autocomplete.', 'info');
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
     );
-  }
-
-  // Request geolocation for the Instant tab; fall back to manual entry.
-  // Thin wrapper preserved for backward compatibility.
-  function requestInstantLocation() {
-    requestLocationFor('instant');
-  }
-
-  let instantPrimed = false;
-  function primeInstant() {
-    prefillNow('instant');
-    requestInstantLocation();
-    instantPrimed = true;
   }
 
   // Auto-fill the Mooka tab on first open: current device date/time plus the
@@ -4970,32 +4980,27 @@
     mookaPrimed = true;
   }
 
-  // Build both forms and the tab switching behaviour.
+  // Build Manual + Mooka forms and the tab switching behaviour.
   ui.init = function init() {
     const area = $('form-area');
     if (area) {
       area.innerHTML =
-        '<div id="manual-pane">' + buildFormHtml('manual', 'manual') + '</div>' +
-        '<div id="instant-pane" class="hidden">' + buildFormHtml('instant', 'instant') + '</div>' +
+        '<div id="manual-pane">' + buildFormHtml('manual') + '</div>' +
         '<div id="mooka-pane" class="hidden">' + buildMookaFormHtml('mooka') + '</div>' +
         '<div id="print-pane" class="hidden">' + buildPrintPaneHtml() + '</div>';
     }
 
-    // City autocomplete + analyze handlers for both forms.
+    // City autocomplete + analyze handlers for Manual and Mooka.
     wireCityAutocomplete('manual');
-    wireCityAutocomplete('instant');
     wireCityAutocomplete('mooka');
     wireAnalyze('manual', 'manual');
-    wireAnalyze('instant', 'instant');
     wireMookaAnalyze('mooka');
 
     // Load persisted custom questions and merge into the active catalog,
-    // then wire the question picker and custom-question form for both forms.
+    // then wire the question picker and custom-question form for Manual.
     ui.refreshCatalog();
     wireQuestionPicker('manual');
-    wireQuestionPicker('instant');
     wireCustomQuestion('manual');
-    wireCustomQuestion('instant');
 
     // Default the manual date/time to "now" for convenience (editable).
     prefillNow('manual');
@@ -5003,28 +5008,21 @@
     requestLocationFor('manual');
     prefillNow('mooka');
 
-    // Tab switching.
+    // Tab switching (only Manual and Mooka Prashna types).
     const tabManual = $('tab-manual');
-    const tabInstant = $('tab-instant');
     const tabMooka = $('tab-mooka');
     const tabPrint = $('tab-print');
     const paneManual = $('manual-pane');
-    const paneInstant = $('instant-pane');
     const paneMooka = $('mooka-pane');
     const panePrint = $('print-pane');
 
     function activate(which) {
       const manualOn = (which === 'manual');
-      const instantOn = (which === 'instant');
       const mookaOn = (which === 'mooka');
       const printOn = (which === 'print');
       if (tabManual) {
         tabManual.classList.toggle('active', manualOn);
         tabManual.setAttribute('aria-selected', manualOn ? 'true' : 'false');
-      }
-      if (tabInstant) {
-        tabInstant.classList.toggle('active', instantOn);
-        tabInstant.setAttribute('aria-selected', instantOn ? 'true' : 'false');
       }
       if (tabMooka) {
         tabMooka.classList.toggle('active', mookaOn);
@@ -5035,10 +5033,8 @@
         tabPrint.setAttribute('aria-selected', printOn ? 'true' : 'false');
       }
       if (paneManual) paneManual.classList.toggle('hidden', !manualOn);
-      if (paneInstant) paneInstant.classList.toggle('hidden', !instantOn);
       if (paneMooka) paneMooka.classList.toggle('hidden', !mookaOn);
       if (panePrint) panePrint.classList.toggle('hidden', !printOn);
-      if (instantOn && !instantPrimed) primeInstant();
       if (mookaOn && !mookaPrimed) primeMooka();
       // When the Print Report tab is activated: clear any stale note if a
       // report already exists, otherwise pre-show the guidance note.
@@ -5052,13 +5048,12 @@
         if (hasReport) {
           hideMsg(noteEl);
         } else {
-          showMsg(noteEl, 'Please generate a report first using the Manual, Instant or Mooka Prashna tab, then return here to print.', 'info');
+          showMsg(noteEl, 'Please generate a report first using the Manual or Mooka Prashna tab, then return here to print.', 'info');
         }
       }
     }
 
     if (tabManual) tabManual.addEventListener('click', function () { activate('manual'); });
-    if (tabInstant) tabInstant.addEventListener('click', function () { activate('instant'); });
     if (tabMooka) tabMooka.addEventListener('click', function () { activate('mooka'); });
     if (tabPrint) tabPrint.addEventListener('click', function () { activate('print'); });
 
@@ -5073,7 +5068,7 @@
           hideMsg(noteEl);
           ui.printReport();
         } else {
-          showMsg(noteEl, 'Please generate a report first using the Manual, Instant or Mooka Prashna tab, then return here to print.', 'info');
+          showMsg(noteEl, 'Please generate a report first using the Manual or Mooka Prashna tab, then return here to print.', 'info');
         }
       });
     }
