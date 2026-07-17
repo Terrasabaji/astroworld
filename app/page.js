@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Loader2, Sparkles, Compass, CalendarClock, HelpCircle, Heart, Clock,
-  Stethoscope, GraduationCap, Activity,
+  Stethoscope, GraduationCap, Activity, Printer,
 } from 'lucide-react';
 import JaiminiPanel from '@/components/astrology/JaiminiPanel';
 import SouthIndianChart from '@/components/astrology/SouthIndianChart';
@@ -19,6 +19,7 @@ import LandingBirthForm from '@/components/birth/LandingBirthForm';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
 import { nativeBirth, DEFAULT_BIRTH } from '@/lib/birth-session';
 import { authHeaders } from '@/lib/api-client';
+import { printChartEngineReport } from '@/lib/chart-engine-print';
 
 /** Top-level module tabs shown after Run (Chart Engine hosts the chart ribbon). */
 const MODULE_TABS = [
@@ -193,11 +194,23 @@ export default function Home() {
         <div className="container pb-8 space-y-4">
           {/* Meta strip */}
           <Card className="bg-slate-900/60 border-slate-800">
-            <CardContent className="py-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-              <MetaPill label="Ayanamsa" value={`${result.input.ayanamsa.toUpperCase()} → ${result.input.ayanamsa_value.toFixed(4)}°`} />
-              <MetaPill label="House Sys" value={houseSysName(result.input.house_system)} />
-              <MetaPill label="JD (UT)" value={result.input.jd_ut.toFixed(6)} />
-              <MetaPill label="Engine" value={`SwE ${result.engine.swe_version}`} />
+            <CardContent className="py-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <MetaPill label="Ayanamsa" value={`${result.input.ayanamsa.toUpperCase()} → ${result.input.ayanamsa_value.toFixed(4)}°`} />
+                <MetaPill label="House Sys" value={houseSysName(result.input.house_system)} />
+                <MetaPill label="JD (UT)" value={result.input.jd_ut.toFixed(6)} />
+                <MetaPill label="Engine" value={`SwE ${result.engine.swe_version}`} />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-slate-600 text-slate-200 hover:bg-slate-800 print:hidden"
+                onClick={() => printChartEngineReport(result, form)}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
             </CardContent>
           </Card>
 

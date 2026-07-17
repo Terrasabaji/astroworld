@@ -7,10 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, ChevronDown, ChevronUp, Calendar, MapPin, Sparkles } from 'lucide-react';
+import { Loader2, Search, ChevronDown, ChevronUp, Calendar, MapPin, Sparkles, Printer } from 'lucide-react';
 import AstroWorldLogo from '@/components/layout/AstroWorldLogo';
 import { APP_NAME } from '@/lib/branding';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
+import { printMuhurtaReport } from '@/lib/muhurta-print';
 
 function fmtLocal(dt) {
   if (!dt) return '';
@@ -252,20 +253,33 @@ export default function MuhurtaPage() {
 
   return (
     <div className="container py-6 space-y-6 max-w-5xl">
-      <div className="flex items-start gap-3">
-        <AstroWorldLogo size={36} showName={false} className="mt-1" />
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-amber-500/80 font-medium">{APP_NAME}</p>
-          <h1 className="text-2xl font-bold text-slate-100">Muhurta Finder</h1>
-          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-            Kala-style electional astrology — scan a date/time range at any place for auspicious muhurtas.
-            Panchanga (tithi, nakshatra, yoga, karana), Choghadiya, Hora, Rahu/Yama/Gulika Kaal, Abhijit,
-            Tarabalam, Chandrabala, Panchaka — with dosha analysis and classical remedies.
-          </p>
-          {!loadingCat && (
-            <p className="text-xs text-slate-500 mt-1">{totalEvents} predefined events across {catalog.length} categories</p>
-          )}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <AstroWorldLogo size={36} showName={false} className="mt-1" />
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-amber-500/80 font-medium">{APP_NAME}</p>
+            <h1 className="text-2xl font-bold text-slate-100">Muhurta Finder</h1>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              Kala-style electional astrology — scan a date/time range at any place for auspicious muhurtas.
+              Panchanga (tithi, nakshatra, yoga, karana), Choghadiya, Hora, Rahu/Yama/Gulika Kaal, Abhijit,
+              Tarabalam, Chandrabala, Panchaka — with dosha analysis and classical remedies.
+            </p>
+            {!loadingCat && (
+              <p className="text-xs text-slate-500 mt-1">{totalEvents} predefined events across {catalog.length} categories</p>
+            )}
+          </div>
         </div>
+        {result && (
+          <Button
+            type="button"
+            variant="outline"
+            className="border-slate-600 text-slate-200 hover:bg-slate-800 print:hidden"
+            onClick={() => printMuhurtaReport(result)}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
+        )}
       </div>
 
       <Card className="bg-slate-900/60 border-slate-800">
