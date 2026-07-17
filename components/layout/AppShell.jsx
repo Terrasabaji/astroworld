@@ -31,13 +31,14 @@ function isActivePath(pathname, href) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** Side module nav — used on module pages only; landing layout is unchanged. */
 function ModulesSideNav({ pathname }) {
   return (
     <aside
-      className="print:hidden shrink-0 border-b md:border-b-0 md:border-r border-saffron-900/30 bg-slate-950/80 md:w-56 lg:w-60 md:sticky md:top-0 md:h-svh md:overflow-y-auto"
+      className="print:hidden shrink-0 border-b md:border-b-0 md:border-r border-saffron-900/30 bg-slate-950/80 md:w-56 lg:w-60 md:sticky md:top-[7.5rem] md:max-h-[calc(100svh-7.5rem)] md:overflow-y-auto"
       aria-label="Modules"
     >
-      <div className="px-3 pt-3 pb-2 md:pt-5">
+      <div className="px-3 pt-3 pb-2 md:pt-4">
         <p className="text-[10px] uppercase tracking-wider text-saffron/70 font-medium px-2 mb-2">
           Modules
         </p>
@@ -75,6 +76,7 @@ export default function AppShell({ children }) {
     (item) => item.href !== '/' && pathname.startsWith(item.href)
   );
 
+  // Landing page: keep the existing logo / Ganesha / birth-form composition.
   if (isMainPage) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -103,10 +105,7 @@ export default function AppShell({ children }) {
           </div>
         </header>
 
-        <div className="flex-1 flex flex-col md:flex-row min-h-0">
-          <ModulesSideNav pathname={pathname} />
-          <div className="flex-1 min-w-0">{children}</div>
-        </div>
+        <div className="flex-1">{children}</div>
 
         <footer className="border-t border-slate-800 bg-slate-900/50 py-3 mt-auto print:hidden">
           <DeveloperCredit />
