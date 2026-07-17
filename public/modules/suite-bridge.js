@@ -68,7 +68,7 @@
 
   function fillPrashna(native) {
     if (!native) return;
-    // Instant Prashna location fields (if present in prashna.html)
+    // Manual / Mooka Prashna location fields (if present in prashna.html)
     ['pr_lat', 'pr_lon', 'pr_tz', 'pr_place', 'lat', 'lon', 'tz', 'place'].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
