@@ -1,113 +1,21 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { Loader2, MapPin, Clock, Calendar as CalIcon, Search, X, Save, Sparkles } from 'lucide-react';
-import AstroWorldLogo from '@/components/layout/AstroWorldLogo';
+import { Loader2, Sparkles } from 'lucide-react';
 import JaiminiPanel from '@/components/astrology/JaiminiPanel';
 import SouthIndianChart from '@/components/astrology/SouthIndianChart';
 import NorthIndianChart from '@/components/astrology/NorthIndianChart';
 
 import { birthFormToPayload } from '@/components/birth/BirthForm';
-import OpenBirthDialog, { OpenBirthButton } from '@/components/birth/OpenBirthDialog';
+import LandingBirthForm from '@/components/birth/LandingBirthForm';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
-import {
-  nativeBirth,
-  GENDER_OPTIONS,
-  MARITAL_STATUS_OPTIONS,
-  normalizeGender,
-  normalizeMaritalStatus,
-} from '@/lib/birth-session';
+import { nativeBirth, DEFAULT_BIRTH } from '@/lib/birth-session';
 import { authHeaders } from '@/lib/api-client';
-
-// Country code -> readable name via browser's Intl.DisplayNames (no data shipped)
-function countryName(code) {
-  try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code;
-  } catch { return code; }
-}
-
-// Compute numeric TZ offset (hours, float) for an IANA tz on a given local date.
-// Uses Intl API which ships the tzdata with the browser (DST-aware for historical dates).
-function tzOffsetFor(tzName, y, mo, d, hh, mm) {
-  try {
-    // Build a UTC date matching the components, then read what wall time that IS in tzName.
-    // Actually simpler: compute how many hours the given tz differs from UTC at that moment.
-    const utcMs = Date.UTC(y, mo - 1, d, hh, mm, 0);
-    const dt = new Date(utcMs);
-    const fmt = new Intl.DateTimeFormat('en-US', {
-      timeZone: tzName, hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-    const parts = fmt.formatToParts(dt).reduce((a, p) => (a[p.type] = p.value, a), {});
-    const asLocalMs = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour % 24, +parts.minute, +parts.second);
-    return (asLocalMs - utcMs) / 3600000;
-  } catch { return null; }
-}
-
-// All ayanamsas exposed by Jagannatha Hora, grouped for readability.
-const AYANAMSA_OPTIONS = [
-  { group: 'Vedic (Indian)', items: [
-    { v: 'lahiri',             l: 'Lahiri Chitrapaksha (default)' },
-    { v: 'lahiri_1940',        l: 'Lahiri 1940' },
-    { v: 'lahiri_vp285',       l: 'Lahiri VP285' },
-    { v: 'lahiri_icrc',        l: 'Lahiri ICRC' },
-    { v: 'raman',              l: 'B.V. Raman' },
-    { v: 'krishnamurti',       l: 'Krishnamurti (KP)' },
-    { v: 'krishnamurti_vp291', l: 'Krishnamurti-Senthilathiban (VP291)' },
-    { v: 'yukteshwar',         l: 'Sri Yukteshwar' },
-    { v: 'jn_bhasin',          l: 'J.N. Bhasin' },
-    { v: 'suryasiddhanta',     l: 'Suryasiddhanta' },
-    { v: 'suryasiddhanta_msun',l: 'Suryasiddhanta (mean Sun)' },
-    { v: 'aryabhata',          l: 'Aryabhata' },
-    { v: 'aryabhata_msun',     l: 'Aryabhata (mean Sun)' },
-    { v: 'aryabhata_522',      l: 'Aryabhata 522' },
-  ]},
-  { group: 'Chitra-based (fixed star)', items: [
-    { v: 'ss_citra',    l: 'SS Citra' },
-    { v: 'ss_revati',   l: 'SS Revati' },
-    { v: 'true_citra',  l: 'True Chitrapaksha' },
-    { v: 'true_revati', l: 'True Revati' },
-    { v: 'true_pushya', l: 'True Pushya (PVRN Rao)' },
-    { v: 'true_mula',   l: 'True Mula (Chandra Hari)' },
-    { v: 'true_sheoran',l: 'True Sheoran (Vedic)' },
-  ]},
-  { group: 'Modern / other', items: [
-    { v: 'deluce',       l: 'De Luce' },
-    { v: 'ushashashi',   l: 'Usha/Shashi' },
-    { v: 'djwhal_khul',  l: 'Djwhal Khul' },
-    { v: 'fagan_bradley',l: 'Fagan/Bradley (Western)' },
-    { v: 'hipparchos',   l: 'Hipparchos' },
-    { v: 'sassanian',    l: 'Sassanian' },
-    { v: 'aldebaran_15tau', l: 'Aldebaran 15° Tau' },
-    { v: 'j2000',        l: 'J2000' },
-    { v: 'j1900',        l: 'J1900' },
-    { v: 'b1950',        l: 'B1950' },
-  ]},
-  { group: 'Galactic-referenced', items: [
-    { v: 'galcent_0sag',      l: 'Galactic Center = 0° Sag' },
-    { v: 'galcent_rgilbrand', l: 'Galactic Center (Gil Brand)' },
-    { v: 'galequ_iau1958',    l: 'Galactic Equator (IAU 1958)' },
-    { v: 'galequ_true',       l: 'Galactic Equator (True)' },
-    { v: 'galequ_mula',       l: 'Galactic Equator mid-Mula' },
-  ]},
-  { group: 'Babylonian variants', items: [
-    { v: 'babyl_kugler1', l: 'Babylonian Kugler 1' },
-    { v: 'babyl_kugler2', l: 'Babylonian Kugler 2' },
-    { v: 'babyl_kugler3', l: 'Babylonian Kugler 3' },
-    { v: 'babyl_huber',   l: 'Babylonian Huber' },
-    { v: 'babyl_etpsc',   l: 'Babylonian Eta Piscium' },
-    { v: 'babyl_britton', l: 'Babylonian Britton' },
-  ]},
-];
 
 const VARGA_KEYS = ['D1','D2','D3','D4','D7','D9','D10','D12','D16','D20','D24','D27','D30','D40','D45','D60'];
 
@@ -143,7 +51,6 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [saveMessage, setSaveMessage] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
   const [result, setResult] = useState(null);
   const [chartStyle, setChartStyle] = useState('south');
 
@@ -151,30 +58,9 @@ export default function Home() {
     if (hydrated) setForm(nativeBirth(birth));
   }, [hydrated, birth]);
 
-  const update = (k) => (e) => {
-    const v = e?.target ? e.target.value : e;
-    setForm((f) => {
-      const next = { ...f, [k]: v };
-      setBirth(next);
-      return next;
-    });
-  };
-
-  const pickCity = (c) => {
-    const label = `${c.n}, ${c.c}`;
-    const off = tzOffsetFor(c.tz, +form.year, +form.month, +form.day, +form.hour, +form.minute);
-    setForm((f) => {
-      const next = {
-        ...f,
-        place: label,
-        latitude: c.la,
-        longitude: c.lo,
-        tz_name: c.tz,
-        tz_offset: off !== null ? +off.toFixed(2) : f.tz_offset,
-      };
-      setBirth(next);
-      return next;
-    });
+  const updateForm = (next) => {
+    setForm(next);
+    setBirth(next);
   };
 
   const castChart = async (data) => {
@@ -201,21 +87,25 @@ export default function Home() {
     }
   };
 
-  const submit = async () => {
+  const runChart = async () => {
+    setSaveMessage(null);
     setBirth(form);
     await castChart(form);
   };
 
-  const openBirthRecord = async (loaded) => {
-    setForm(loaded);
-    setBirth(loaded);
+  const cancelForm = (resetTo = DEFAULT_BIRTH) => {
+    const next = nativeBirth(resetTo);
+    setForm(next);
+    setBirth(next);
+    setResult(null);
+    setError(null);
     setSaveMessage(null);
-    await castChart(loaded);
   };
 
   const saveBirthRecord = async () => {
     setSaving(true);
     setSaveMessage(null);
+    setError(null);
     try {
       setBirth(form);
       const payload = {
@@ -235,360 +125,216 @@ export default function Home() {
       setBirth(next);
       setSaveMessage('Birth record saved.');
     } catch (e) {
-      setSaveMessage(e.message);
+      setError(e.message);
     } finally { setSaving(false); }
   };
 
   return (
-    <main className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100">
-      <div className="container py-6"></div>
-
-      <div className="container pb-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <Card className="lg:col-span-4 bg-slate-900/60 border-slate-800 self-start">
-          <CardHeader>
-            <CardTitle className="text-slate-100">Birth Data</CardTitle>
-            <CardDescription>Enter native&apos;s exact particulars</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div>
-                <Label className="text-slate-300">Name</Label>
-                <Input value={form.name || ''} onChange={update('name')} placeholder="Native" className="mt-1.5" />
-              </div>
-              <div>
-                <Label className="text-slate-300">Gender</Label>
-                <Select
-                  value={normalizeGender(form.gender)}
-                  onValueChange={(gender) => update('gender')(gender)}
-                >
-                  <SelectTrigger className="mt-1.5 bg-slate-900 border-slate-700 text-slate-100">
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GENDER_OPTIONS.map((g) => (
-                      <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-slate-300">Marital status</Label>
-                <Select
-                  value={normalizeMaritalStatus(form.marital_status)}
-                  onValueChange={(marital_status) => update('marital_status')(marital_status)}
-                >
-                  <SelectTrigger className="mt-1.5 bg-slate-900 border-slate-700 text-slate-100">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MARITAL_STATUS_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <Label className="text-slate-300 flex items-center gap-1.5"><CalIcon className="h-3.5 w-3.5"/>Date</Label>
-              <div className="grid grid-cols-3 gap-2 mt-1.5">
-                <Input type="number" value={form.year}  onChange={update('year')}  placeholder="YYYY" />
-                <Input type="number" value={form.month} onChange={update('month')} placeholder="MM" min={1} max={12}/>
-                <Input type="number" value={form.day}   onChange={update('day')}   placeholder="DD" min={1} max={31}/>
-              </div>
-            </div>
-            <div>
-              <Label className="text-slate-300 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5"/>Local Time (24h)</Label>
-              <div className="grid grid-cols-3 gap-2 mt-1.5">
-                <Input type="number" value={form.hour}   onChange={update('hour')}   placeholder="HH" min={0} max={23}/>
-                <Input type="number" value={form.minute} onChange={update('minute')} placeholder="MM" min={0} max={59}/>
-                <Input type="number" value={form.second} onChange={update('second')} placeholder="SS" min={0} max={59}/>
-              </div>
-            </div>
-            <div>
-              <Label className="text-slate-300">TZ Offset (auto-computed, editable)</Label>
-              <Input type="number" step="0.25" value={form.tz_offset} onChange={update('tz_offset')} className="mt-1.5 font-mono"/>
-            </div>
-            <div>
-              <Label className="text-slate-300 flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5"/>Place of Birth</Label>
-              <CityAutocomplete value={form.place} onPick={pickCity} onManualClear={() => setForm(f => ({ ...f, place: '' }))} />
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <Input type="number" step="0.000001" value={form.latitude}  onChange={update('latitude')}  placeholder="Latitude"/>
-                <Input type="number" step="0.000001" value={form.longitude} onChange={update('longitude')} placeholder="Longitude"/>
-              </div>
-              {form.tz_name && (
-                <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
-                  IANA: {form.tz_name} · resolved offset {form.tz_offset >= 0 ? '+' : ''}{form.tz_offset}h
-                  <span className="text-slate-600"> (DST-aware for birth date)</span>
-                </p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-slate-300">Ayanamsa</Label>
-                <Select value={form.ayanamsa} onValueChange={update('ayanamsa')}>
-                  <SelectTrigger className="mt-1.5"><SelectValue/></SelectTrigger>
-                  <SelectContent className="max-h-96">
-                    {AYANAMSA_OPTIONS.map((g) => (
-                      <SelectGroup key={g.group}>
-                        <SelectLabel className="text-[10px] uppercase tracking-wider text-slate-500">{g.group}</SelectLabel>
-                        {g.items.map((i) => <SelectItem key={i.v} value={i.v}>{i.l}</SelectItem>)}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-slate-300">House System</Label>
-                <Select value={form.ayanamsa === 'kp' ? 'P' : form.house_system} onValueChange={update('house_system')} disabled={form.ayanamsa === 'kp'}>
-                  <SelectTrigger className="mt-1.5"><SelectValue/></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="P">Placidus</SelectItem>
-                    <SelectItem value="W">Whole Sign</SelectItem>
-                    <SelectItem value="E">Equal</SelectItem>
-                    <SelectItem value="K">Koch</SelectItem>
-                    <SelectItem value="R">Regiomontanus</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {form.ayanamsa === 'kp' && <p className="text-[11px] text-saffron-400/90 -mt-2">KP mode strictly enforces Placidus houses.</p>}
-            <div className="flex gap-2">
-              <Button onClick={submit} disabled={loading || saving} className="flex-1 bg-gradient-to-r from-saffron-500 to-saffron-600 hover:from-saffron-600 hover:to-saffron-700 text-slate-950 font-semibold">
-                {loading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Calculating…</> : 'Cast Chart'}
-              </Button>
-              <OpenBirthButton
-                onClick={() => setOpenDialog(true)}
-                disabled={loading || saving}
-                className="border-slate-600 text-slate-200 hover:bg-slate-800 shrink-0 px-3"
-              />
-              <Button
-                type="button"
-                onClick={saveBirthRecord}
-                disabled={loading || saving}
-                variant="outline"
-                className="border-slate-600 text-slate-200 hover:bg-slate-800 shrink-0 px-3"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="h-4 w-4 mr-1.5" />Save</>}
-              </Button>
-            </div>
-            <OpenBirthDialog open={openDialog} onOpenChange={setOpenDialog} onOpen={openBirthRecord} />
-            {saveMessage && (
-              <p className={`text-sm ${saveMessage === 'Birth record saved.' ? 'text-emerald-400' : 'text-red-400'}`}>
-                {saveMessage}
-              </p>
-            )}
-            {error && <p className="text-sm text-red-400">{error}</p>}
-
-          </CardContent>
-        </Card>
-
-        <div className="lg:col-span-8 space-y-4">
-          {!result && !loading && (
-            <Card className="bg-slate-900/60 border-slate-800">
-              <CardContent className="py-16 text-center text-slate-400">
-                <AstroWorldLogo size={40} showName={false} className="mx-auto mb-3 justify-center" />
-                <p className="text-lg font-medium text-slate-200">Chart canvas awaits</p>
-                <p className="text-sm mt-1">Enter birth data and cast the chart for a comprehensive overview,<br/>D1/D9 wheels, KP sub-lords and Vimshottari dashas.</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {result && (
-            <>
-              <Card className="bg-slate-900/60 border-slate-800">
-                <CardContent className="py-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                  <MetaPill label="Ayanamsa" value={`${result.input.ayanamsa.toUpperCase()} → ${result.input.ayanamsa_value.toFixed(4)}°`} />
-                  <MetaPill label="House Sys" value={houseSysName(result.input.house_system)} />
-                  <MetaPill label="JD (UT)" value={result.input.jd_ut.toFixed(6)} />
-                  <MetaPill label="Engine" value={`SwE ${result.engine.swe_version}`} />
-                  <Link href="/yoga-dosha" className="ml-auto">
-                    <Button size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white">
-                      <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                      Yogas &amp; Doshas
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-
-              <Tabs defaultValue="overview">
-                <TabsList className="bg-slate-900/60 border border-slate-800 overflow-x-auto flex-nowrap w-full justify-start">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="charts">Charts</TabsTrigger>
-                  <TabsTrigger value="vargas">Vargas</TabsTrigger>
-                  <TabsTrigger value="planets">Planets</TabsTrigger>
-                  <TabsTrigger value="houses">Cusps</TabsTrigger>
-                  <TabsTrigger value="kp">KP</TabsTrigger>
-                  <TabsTrigger value="jaimini">Jaimini</TabsTrigger>
-                  <TabsTrigger value="ashtaka">Ashtakavarga</TabsTrigger>
-                  <TabsTrigger value="sudarshana">Sudarshana</TabsTrigger>
-                  <TabsTrigger value="chakras">Chakras</TabsTrigger>
-                  <TabsTrigger value="transit">Transit</TabsTrigger>
-                  <TabsTrigger value="dasha">Dasha</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="overview" className="mt-3">
-                  <Card className="bg-slate-900/60 border-slate-800">
-                    <CardContent className="py-5 space-y-3">
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="text-slate-400">Ascendant:</span>
-                        <span className="font-medium text-slate-100">
-                          {result.ascendant ? `${SIGNS[result.ascendant.sign_index]} ${result.ascendant.deg_in_sign.toFixed(2)}°` : '—'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                        {result.planets.slice(0, 9).map((p) => (
-                          <div key={p.name} className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2">
-                            <p className="text-[11px] text-slate-500">{p.name}</p>
-                            <p className="text-sm text-slate-200">{SIGNS[p.sign_index]} {p.deg_in_sign.toFixed(1)}°{p.retrograde ? ' R' : ''}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-slate-500 pt-2">
-                        For comprehensive current assessment, see the <Link href="/current-assessment" className="text-saffron-400 hover:underline">Current Assessment</Link> tab.
-                      </p>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="charts" className="mt-3">
-                  <div className="flex gap-1 mb-3">
-                    {['south', 'north'].map(s => (
-                      <button key={s} onClick={() => setChartStyle(s)}
-                        className={`px-3 min-h-[44px] py-1.5 rounded text-xs ${chartStyle === s ? 'bg-saffron/20 text-saffron-300 border border-saffron/30' : 'text-slate-400 border border-slate-700 hover:border-saffron/30'}`}>
-                        {s === 'south' ? 'South Indian' : 'North Indian'}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {chartStyle === 'south' ? (
-                      <SouthIndianChart title="D1 — Rashi" ascSign={result.ascendant.sign_index}
-                        placements={buildPlacements(result, 'sign_index')} />
-                    ) : (
-                      <NorthIndianChart title="D1 — Rashi" ascSign={result.ascendant.sign_index}
-                        placements={buildPlacements(result, 'sign_index')} />
-                    )}
-                    {chartStyle === 'south' ? (
-                      <SouthIndianChart title="D9 — Navamsa"
-                        ascSign={(Math.floor((result.ascendant.longitude * 9) % 360 / 30))}
-                        placements={buildPlacements(result, 'd9_sign_index')} />
-                    ) : (
-                      <NorthIndianChart title="D9 — Navamsa"
-                        ascSign={(Math.floor((result.ascendant.longitude * 9) % 360 / 30))}
-                        placements={buildPlacements(result, 'd9_sign_index')} />
-                    )}
-                    <BhavChalitChart result={result} chartStyle={chartStyle} />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="planets" className="mt-3">
-                  <Card className="bg-slate-900/60 border-slate-800">
-                    <CardContent className="p-0 overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-slate-800 hover:bg-transparent">
-                            <TableHead className="text-slate-400">Body</TableHead>
-                            <TableHead className="text-slate-400">Sign (D1)</TableHead>
-                            <TableHead className="text-slate-400">DMS in Sign</TableHead>
-                            <TableHead className="text-slate-400">Longitude</TableHead>
-                            <TableHead className="text-slate-400">Nav (D9)</TableHead>
-                            <TableHead className="text-slate-400">Nakshatra</TableHead>
-                            <TableHead className="text-slate-400 text-center">Pada</TableHead>
-                            <TableHead className="text-slate-400">Star Lord</TableHead>
-                            <TableHead className="text-slate-400">Sub</TableHead>
-                            <TableHead className="text-slate-400">Sub-Sub</TableHead>
-                            <TableHead className="text-slate-400 text-center">R</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <PlanetRow p={result.ascendant} highlight />
-                          {result.planets.map(p => <PlanetRow key={p.name} p={p} />)}
-                          {result.upagrahas && (
-                            <>
-                              <PlanetRow key="Gulika" p={result.upagrahas.gulika} upagraha />
-                              <PlanetRow key="Maandi" p={result.upagrahas.maandi} upagraha />
-                            </>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="houses" className="mt-3">
-                  <Card className="bg-slate-900/60 border-slate-800">
-                    <CardContent className="p-0 overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-slate-800 hover:bg-transparent">
-                            <TableHead className="text-slate-400">Cusp</TableHead>
-                            <TableHead className="text-slate-400">Sign</TableHead>
-                            <TableHead className="text-slate-400">DMS in Sign</TableHead>
-                            <TableHead className="text-slate-400">Longitude</TableHead>
-                            <TableHead className="text-slate-400">Nakshatra</TableHead>
-                            <TableHead className="text-slate-400">Star Lord</TableHead>
-                            <TableHead className="text-slate-400">Sub Lord</TableHead>
-                            <TableHead className="text-slate-400">Sub-Sub Lord</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {result.houses.map(h => (
-                            <TableRow key={h.name} className="border-slate-800">
-                              <TableCell className="font-mono text-slate-200">{h.name}</TableCell>
-                              <TableCell><SignBadge sign={h.sign} /></TableCell>
-                              <TableCell className="font-mono text-slate-300">{h.dms}</TableCell>
-                              <TableCell className="font-mono text-slate-500 text-xs">{h.longitude.toFixed(4)}°</TableCell>
-                              <TableCell className="text-slate-300">{h.nakshatra}</TableCell>
-                              <TableCell className="text-slate-300">{h.nakshatra_lord}</TableCell>
-                              <TableCell className="text-saffron-300 font-medium">{h.sub_lord}</TableCell>
-                              <TableCell className="text-saffron-200/70">{h.sub_sub_lord}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="dasha" className="mt-3">
-                  <DashaPanel dasha={result.dasha} />
-                </TabsContent>
-
-                <TabsContent value="vargas" className="mt-3">
-                  <VargasPanel result={result} chartStyle={chartStyle} />
-                </TabsContent>
-
-                <TabsContent value="kp" className="mt-3">
-                  <KPPanel result={result} />
-                </TabsContent>
-
-                <TabsContent value="jaimini" className="mt-3">
-                  <JaiminiPanel result={result} />
-                </TabsContent>
-
-                <TabsContent value="transit" className="mt-3">
-                  <TransitPanel result={result} form={form} setResult={setResult} />
-                </TabsContent>
-
-                <TabsContent value="ashtaka" className="mt-3">
-                  <AshtakavargaPanel result={result} />
-                </TabsContent>
-
-                <TabsContent value="sudarshana" className="mt-3">
-                  <SudarshanaPanel result={result} />
-                </TabsContent>
-
-                <TabsContent value="chakras" className="mt-3">
-                  <ChakrasPanel result={result} />
-                </TabsContent>
-              </Tabs>
-            </>
-          )}
-        </div>
+    <main className="bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_40%),linear-gradient(180deg,#020617_0%,#0f172a_55%,#111827_100%)] text-slate-100">
+      <div className="container py-8 sm:py-12 pb-10">
+        <LandingBirthForm
+          form={form}
+          onChange={updateForm}
+          onSave={saveBirthRecord}
+          onCancel={cancelForm}
+          onRun={runChart}
+          loading={loading}
+          saving={saving}
+          message={saveMessage}
+          error={error}
+        />
       </div>
 
-      <footer className="container py-6 text-center text-xs text-slate-500">
-        Positions via Swiss Ephemeris · sidereal · KP sub-lord per Vimshottari 120-year division · D9 = 9× longitude mod 360.
-      </footer>
+      {result && (
+        <div className="container pb-8 space-y-4">
+          <Card className="bg-slate-900/60 border-slate-800">
+            <CardContent className="py-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+              <MetaPill label="Ayanamsa" value={`${result.input.ayanamsa.toUpperCase()} → ${result.input.ayanamsa_value.toFixed(4)}°`} />
+              <MetaPill label="House Sys" value={houseSysName(result.input.house_system)} />
+              <MetaPill label="JD (UT)" value={result.input.jd_ut.toFixed(6)} />
+              <MetaPill label="Engine" value={`SwE ${result.engine.swe_version}`} />
+              <Link href="/yoga-dosha" className="ml-auto">
+                <Button size="sm" className="bg-emerald-700 hover:bg-emerald-600 text-white">
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  Yogas &amp; Doshas
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Tabs defaultValue="overview">
+            <TabsList className="bg-slate-900/60 border border-slate-800 overflow-x-auto flex-nowrap w-full justify-start">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="charts">Charts</TabsTrigger>
+              <TabsTrigger value="vargas">Vargas</TabsTrigger>
+              <TabsTrigger value="planets">Planets</TabsTrigger>
+              <TabsTrigger value="houses">Cusps</TabsTrigger>
+              <TabsTrigger value="kp">KP</TabsTrigger>
+              <TabsTrigger value="jaimini">Jaimini</TabsTrigger>
+              <TabsTrigger value="ashtaka">Ashtakavarga</TabsTrigger>
+              <TabsTrigger value="sudarshana">Sudarshana</TabsTrigger>
+              <TabsTrigger value="chakras">Chakras</TabsTrigger>
+              <TabsTrigger value="transit">Transit</TabsTrigger>
+              <TabsTrigger value="dasha">Dasha</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="mt-3">
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="py-5 space-y-3">
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-slate-400">Ascendant:</span>
+                    <span className="font-medium text-slate-100">
+                      {result.ascendant ? `${SIGNS[result.ascendant.sign_index]} ${result.ascendant.deg_in_sign.toFixed(2)}°` : '—'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {result.planets.slice(0, 9).map((p) => (
+                      <div key={p.name} className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2">
+                        <p className="text-[11px] text-slate-500">{p.name}</p>
+                        <p className="text-sm text-slate-200">{SIGNS[p.sign_index]} {p.deg_in_sign.toFixed(1)}°{p.retrograde ? ' R' : ''}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 pt-2">
+                    For comprehensive current assessment, see the <Link href="/current-assessment" className="text-saffron-400 hover:underline">Current Assessment</Link> tab.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="charts" className="mt-3">
+              <div className="flex gap-1 mb-3">
+                {['south', 'north'].map(s => (
+                  <button key={s} onClick={() => setChartStyle(s)}
+                    className={`px-3 min-h-[44px] py-1.5 rounded text-xs ${chartStyle === s ? 'bg-saffron/20 text-saffron-300 border border-saffron/30' : 'text-slate-400 border border-slate-700 hover:border-saffron/30'}`}>
+                    {s === 'south' ? 'South Indian' : 'North Indian'}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {chartStyle === 'south' ? (
+                  <SouthIndianChart title="D1 — Rashi" ascSign={result.ascendant.sign_index}
+                    placements={buildPlacements(result, 'sign_index')} />
+                ) : (
+                  <NorthIndianChart title="D1 — Rashi" ascSign={result.ascendant.sign_index}
+                    placements={buildPlacements(result, 'sign_index')} />
+                )}
+                {chartStyle === 'south' ? (
+                  <SouthIndianChart title="D9 — Navamsa"
+                    ascSign={(Math.floor((result.ascendant.longitude * 9) % 360 / 30))}
+                    placements={buildPlacements(result, 'd9_sign_index')} />
+                ) : (
+                  <NorthIndianChart title="D9 — Navamsa"
+                    ascSign={(Math.floor((result.ascendant.longitude * 9) % 360 / 30))}
+                    placements={buildPlacements(result, 'd9_sign_index')} />
+                )}
+                <BhavChalitChart result={result} chartStyle={chartStyle} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="planets" className="mt-3">
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-800 hover:bg-transparent">
+                        <TableHead className="text-slate-400">Body</TableHead>
+                        <TableHead className="text-slate-400">Sign (D1)</TableHead>
+                        <TableHead className="text-slate-400">DMS in Sign</TableHead>
+                        <TableHead className="text-slate-400">Longitude</TableHead>
+                        <TableHead className="text-slate-400">Nav (D9)</TableHead>
+                        <TableHead className="text-slate-400">Nakshatra</TableHead>
+                        <TableHead className="text-slate-400 text-center">Pada</TableHead>
+                        <TableHead className="text-slate-400">Star Lord</TableHead>
+                        <TableHead className="text-slate-400">Sub</TableHead>
+                        <TableHead className="text-slate-400">Sub-Sub</TableHead>
+                        <TableHead className="text-slate-400 text-center">R</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <PlanetRow p={result.ascendant} highlight />
+                      {result.planets.map(p => <PlanetRow key={p.name} p={p} />)}
+                      {result.upagrahas && (
+                        <>
+                          <PlanetRow key="Gulika" p={result.upagrahas.gulika} upagraha />
+                          <PlanetRow key="Maandi" p={result.upagrahas.maandi} upagraha />
+                        </>
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="houses" className="mt-3">
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-slate-800 hover:bg-transparent">
+                        <TableHead className="text-slate-400">Cusp</TableHead>
+                        <TableHead className="text-slate-400">Sign</TableHead>
+                        <TableHead className="text-slate-400">DMS in Sign</TableHead>
+                        <TableHead className="text-slate-400">Longitude</TableHead>
+                        <TableHead className="text-slate-400">Nakshatra</TableHead>
+                        <TableHead className="text-slate-400">Star Lord</TableHead>
+                        <TableHead className="text-slate-400">Sub Lord</TableHead>
+                        <TableHead className="text-slate-400">Sub-Sub Lord</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {result.houses.map(h => (
+                        <TableRow key={h.name} className="border-slate-800">
+                          <TableCell className="font-mono text-slate-200">{h.name}</TableCell>
+                          <TableCell><SignBadge sign={h.sign} /></TableCell>
+                          <TableCell className="font-mono text-slate-300">{h.dms}</TableCell>
+                          <TableCell className="font-mono text-slate-500 text-xs">{h.longitude.toFixed(4)}°</TableCell>
+                          <TableCell className="text-slate-300">{h.nakshatra}</TableCell>
+                          <TableCell className="text-slate-300">{h.nakshatra_lord}</TableCell>
+                          <TableCell className="text-saffron-300 font-medium">{h.sub_lord}</TableCell>
+                          <TableCell className="text-saffron-200/70">{h.sub_sub_lord}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="dasha" className="mt-3">
+              <DashaPanel dasha={result.dasha} />
+            </TabsContent>
+
+            <TabsContent value="vargas" className="mt-3">
+              <VargasPanel result={result} chartStyle={chartStyle} />
+            </TabsContent>
+
+            <TabsContent value="kp" className="mt-3">
+              <KPPanel result={result} />
+            </TabsContent>
+
+            <TabsContent value="jaimini" className="mt-3">
+              <JaiminiPanel result={result} />
+            </TabsContent>
+
+            <TabsContent value="transit" className="mt-3">
+              <TransitPanel result={result} form={form} setResult={setResult} />
+            </TabsContent>
+
+            <TabsContent value="ashtaka" className="mt-3">
+              <AshtakavargaPanel result={result} />
+            </TabsContent>
+
+            <TabsContent value="sudarshana" className="mt-3">
+              <SudarshanaPanel result={result} />
+            </TabsContent>
+
+            <TabsContent value="chakras" className="mt-3">
+              <ChakrasPanel result={result} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
     </main>
   );
 }
@@ -826,105 +572,6 @@ function DashaTable({ title, rows, lordKey, parentKey }) {  return (
     </Card>
   );
 }
-
-// -------- City Autocomplete (bundled GeoNames cities15000 dataset) --------
-function CityAutocomplete({ value, onPick, onManualClear }) {
-  const [query, setQuery] = useState(value || '');
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const debounceRef = useRef(null);
-  const boxRef = useRef(null);
-
-  // Sync query when parent value changes (e.g., after pick)
-  useEffect(() => { setQuery(value || ''); }, [value]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-
-  const fetchResults = (q) => {
-    if (!q || q.trim().length < 2) { setResults([]); return; }
-    setLoading(true);
-    fetch(`/api/cities?q=${encodeURIComponent(q)}&limit=12`)
-      .then(r => r.json())
-      .then(d => { setResults(d.results || []); setHighlight(0); })
-      .catch(() => setResults([]))
-      .finally(() => setLoading(false));
-  };
-
-  const onChange = (e) => {
-    const v = e.target.value;
-    setQuery(v);
-    setOpen(true);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchResults(v), 180);
-  };
-
-  const handleKey = (e) => {
-    if (!open || results.length === 0) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(h => Math.min(h + 1, results.length - 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(h => Math.max(h - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); onPick(results[highlight]); setOpen(false); }
-    else if (e.key === 'Escape') setOpen(false);
-  };
-
-  const clear = () => { setQuery(''); setResults([]); setOpen(false); onManualClear && onManualClear(); };
-
-  return (
-    <div className="relative mt-1.5" ref={boxRef}>
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
-        <Input
-          value={query}
-          onChange={onChange}
-          onFocus={() => query && setOpen(true)}
-          onKeyDown={handleKey}
-          placeholder="Search 34,000+ cities (e.g. Varanasi, Sao Paulo, Tokyo)"
-          className="pl-8 pr-8 font-medium"
-          autoComplete="off"
-        />
-        {query && (
-          <button type="button" onClick={clear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-      {open && (results.length > 0 || loading) && (
-        <div className="absolute z-30 mt-1 w-full rounded-md border border-slate-700 bg-slate-900 shadow-xl shadow-black/40 max-h-72 overflow-y-auto">
-          {loading && <div className="px-3 py-2 text-xs text-slate-500">Searching…</div>}
-          {results.map((c, i) => (
-            <button key={`${c.n}-${c.la}-${c.lo}`} type="button"
-              onMouseEnter={() => setHighlight(i)}
-              onClick={() => { onPick(c); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 flex items-center gap-2 border-b border-slate-800/60 last:border-0 ${i === highlight ? 'bg-slate-800/80' : 'hover:bg-slate-800/50'}`}>
-              <MapPin className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm text-slate-100 truncate">
-                  {c.n}
-                  <span className="text-slate-500 font-normal ml-1.5 text-xs">{countryName(c.c)}</span>
-                </div>
-                <div className="text-[10px] text-slate-500 font-mono truncate">
-                  {c.la.toFixed(3)}, {c.lo.toFixed(3)} · {c.tz}
-                  {c.p > 0 && <span className="ml-1.5 text-slate-600">· pop {(c.p/1e6).toFixed(c.p > 1e6 ? 1 : 2)}M</span>}
-                </div>
-              </div>
-            </button>
-          ))}
-          {!loading && results.length === 0 && query.length >= 2 && (
-            <div className="px-3 py-2 text-xs text-slate-500">No cities matched.</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 // ---------- Vargas Panel: 16 divisional charts in a responsive grid ----------
 function VargasPanel({ result, chartStyle }) {
