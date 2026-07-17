@@ -30,6 +30,14 @@
   function fillMarriage(data) {
     fillPerson('b_', data.groom);
     fillPerson('g_', data.bride);
+    // Marital status from Chart Engine birth session (gates marriage-event timing).
+    window.__AW_MARITAL__ = {
+      groom: (data.groom && data.groom.marital_status) || 'unmarried',
+      bride: (data.bride && data.bride.marital_status) || 'unmarried',
+      native: (data.native && data.native.marital_status)
+        || (data.groom && data.groom.marital_status)
+        || 'unmarried',
+    };
   }
 
   function fillHealth(native) {

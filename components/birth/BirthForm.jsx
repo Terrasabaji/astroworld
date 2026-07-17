@@ -6,7 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Search, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { GENDER_OPTIONS, birthFields, normalizeGender } from '@/lib/birth-session';
+import {
+  GENDER_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  birthFields,
+  normalizeGender,
+  normalizeMaritalStatus,
+} from '@/lib/birth-session';
 
 function countryName(code) {
   try {
@@ -15,7 +21,7 @@ function countryName(code) {
 }
 
 const DEFAULT = {
-  name: '', gender: 'male', place: '',
+  name: '', gender: 'male', marital_status: 'unmarried', place: '',
   year: 1990, month: 1, day: 1,
   hour: 12, minute: 0, second: 0,
   latitude: '', longitude: '',
@@ -23,7 +29,9 @@ const DEFAULT = {
   ayanamsa: 'lahiri', house_system: 'P',
 };
 
-export default function BirthForm({ value, onChange, prefix = '', showName = true, showGender = false, compact = false }) {
+export default function BirthForm({
+  value, onChange, prefix = '', showName = true, showGender = false, showMarital = false, compact = false,
+}) {
   const [form, setForm] = useState({ ...DEFAULT, ...value });
   const [cityQuery, setCityQuery] = useState(value?.place || '');
   const [cityResults, setCityResults] = useState([]);
@@ -88,6 +96,24 @@ export default function BirthForm({ value, onChange, prefix = '', showName = tru
             <SelectContent>
               {GENDER_OPTIONS.map((g) => (
                 <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {showMarital && (
+        <div>
+          <Label className="text-slate-400 text-xs">Marital status</Label>
+          <Select
+            value={normalizeMaritalStatus(form.marital_status)}
+            onValueChange={(marital_status) => update({ marital_status })}
+          >
+            <SelectTrigger className="bg-slate-900 border-slate-700 mt-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MARITAL_STATUS_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>

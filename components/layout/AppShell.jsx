@@ -110,7 +110,7 @@ export default function AppShell({ children }) {
               </Link>
             )}
           </div>
-          {auth?.user && (
+          {auth?.user && !auth?.isGuest && (
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs text-saffron-300/80">{auth.user.name}</span>
               <button

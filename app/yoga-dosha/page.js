@@ -361,16 +361,27 @@ export default function YogaDoshaPage() {
           <Card className="bg-slate-900/40 border-slate-800">
             <CardContent className="py-4 flex flex-wrap gap-4 text-sm">
               <div><span className="text-slate-500">Age: </span><span className="text-slate-200">{report.native?.age_years} yrs</span></div>
+              <div><span className="text-slate-500">Marital: </span><span className="text-slate-200">{report.native?.marital_status || '—'}</span></div>
               <div><span className="text-slate-500">Yogas: </span><span className="text-emerald-400">{report.summary?.yogas_count}</span></div>
               <div><span className="text-slate-500">Doshas: </span><span className="text-amber-400">{report.summary?.doshas_count}</span></div>
               <div><span className="text-slate-500">Active yogas (dasha): </span><span className="text-emerald-300">{report.summary?.active_yogas_count ?? 0}</span></div>
               <div><span className="text-slate-500">Active doshas (dasha): </span><span className="text-amber-300">{report.summary?.active_doshas_count ?? 0}</span></div>
               <div><span className="text-slate-500">Sade Sati now: </span><span className={report.summary?.sade_sati_active ? 'text-rose-300' : 'text-slate-400'}>{report.summary?.sade_sati_active ? 'Active' : 'No'}</span></div>
+              <div><span className="text-slate-500">Kuja assessed: </span><span className="text-slate-300">{report.native?.kuja_assessed ? 'Yes' : 'No'}</span></div>
               {md && (
                 <div><span className="text-slate-500">Current dasha: </span><span className="text-sky-300">{md.lord}{ad ? `–${ad.lord}` : ''}{pd ? `–${pd.lord}` : ''}</span></div>
               )}
             </CardContent>
           </Card>
+          {!!report.summary?.analysis_notes?.length && (
+            <Card className="bg-slate-900/40 border-slate-800">
+              <CardContent className="py-3 space-y-1 text-sm text-amber-200/90">
+                {report.summary.analysis_notes.map((n) => (
+                  <p key={n}>• {n}</p>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex flex-wrap gap-2 print:hidden">
             {FILTERS.map((f) => (
