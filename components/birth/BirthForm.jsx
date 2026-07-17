@@ -162,6 +162,7 @@ export function birthFormToPayload(form) {
   return {
     name: b.name,
     gender: b.gender,
+    marital_status: b.marital_status,
     place: b.place,
     year: b.year, month: b.month, day: b.day,
     hour: b.hour, minute: b.minute, second: b.second,

@@ -27,28 +27,60 @@ export default function AppShell({ children }) {
   const pathname = usePathname();
   const auth = useAuth();
 
-  // Determine if we're on the home/main page (show module grid) or inside a module (show back button)
   const isMainPage = pathname === '/';
   const activeModule = NAV.find(
     (item) => item.href !== '/' && pathname.startsWith(item.href)
   );
 
+  if (isMainPage) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <header className="print:hidden px-4 sm:px-6 pt-4 sm:pt-5">
+          <div className="flex items-start justify-between gap-4">
+            <Link href="/" className="shrink-0" aria-label={APP_NAME}>
+              <AstroWorldLogo size={72} showName className="hidden sm:inline-flex" />
+              <AstroWorldLogo size={56} showName className="inline-flex sm:hidden" />
+            </Link>
+            <Image
+              src={GANAPATI_PATH}
+              alt="Uchhishta Ganapati"
+              width={72}
+              height={72}
+              className="rounded shrink-0 hidden sm:block"
+              priority
+            />
+            <Image
+              src={GANAPATI_PATH}
+              alt="Uchhishta Ganapati"
+              width={56}
+              height={56}
+              className="rounded shrink-0 block sm:hidden"
+              priority
+            />
+          </div>
+        </header>
+
+        <div className="flex-1">{children}</div>
+
+        <footer className="border-t border-slate-800 bg-slate-900/50 py-3 mt-auto print:hidden">
+          <DeveloperCredit />
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <header className="border-b border-saffron-900/40 bg-slate-950/90 backdrop-blur sticky top-0 z-50 print:hidden">
-        {/* Banner row */}
         <div className="container flex items-center justify-between py-3">
-          {/* Left: Logo — increased size */}
           <Link href="/" className="shrink-0">
             <AstroWorldLogo size={72} showName={false} className="hidden sm:inline-flex" />
             <AstroWorldLogo size={52} showName={false} className="inline-flex sm:hidden" />
           </Link>
-          {/* Center: Title + Subtitle */}
           <div className="text-center flex-1 px-4">
             <h1 className="text-lg sm:text-2xl font-bold text-saffron">{APP_NAME}</h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-0.5">{APP_TAGLINE}</p>
           </div>
-          {/* Right: Ganapati — increased size */}
           <Image
             src={GANAPATI_PATH}
             alt="Uchhishta Ganapati"
@@ -64,9 +96,7 @@ export default function AppShell({ children }) {
             className="rounded shrink-0 block sm:hidden"
           />
         </div>
-        {/* Panchanga scrolling bar */}
         <PanchangaBar />
-        {/* File Menu + User info bar */}
         <div className="container flex items-center justify-between py-2 border-t border-saffron-900/20">
           <div className="flex items-center gap-3">
             <FileMenu />
@@ -94,32 +124,7 @@ export default function AppShell({ children }) {
         </div>
       </header>
 
-      <div className="flex-1">
-        {/* On main page, show module grid buttons (excluding Chart Engine which IS the main page) */}
-        {isMainPage && (
-          <div className="container py-6">
-            <h2 className="text-sm uppercase tracking-wider text-saffron/70 font-medium mb-4">Modules</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {NAV.filter((item) => item.href !== '/').map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="group flex flex-col items-center justify-center gap-3 p-4 sm:p-6 rounded-xl border border-saffron-900/30 bg-slate-900/50 hover:bg-saffron-900/20 hover:border-saffron/40 transition-all duration-200 min-h-[120px] sm:min-h-[140px]"
-                  >
-                    <Icon className="h-8 w-8 sm:h-10 sm:w-10 text-saffron-400 group-hover:text-saffron-300 transition-colors" />
-                    <span className="text-xs sm:text-sm font-medium text-slate-300 group-hover:text-saffron-200 text-center transition-colors">
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {children}
-      </div>
+      <div className="flex-1">{children}</div>
 
       <footer className="border-t border-slate-800 bg-slate-900/50 py-3 mt-auto print:hidden">
         <DeveloperCredit />
