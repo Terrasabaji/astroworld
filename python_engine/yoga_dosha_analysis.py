@@ -884,15 +884,16 @@ def detect_yogas(chart: dict, ctx: dict) -> List[dict]:
     return yogas
 
 
-def detect_doshas(chart: dict, ctx: dict) -> List[dict]:
+def detect_doshas(chart: dict, ctx: dict, include_kuja: bool = True) -> List[dict]:
     doshas = []
     H = ctx["houses"]
     pmap = ctx["pmap"]
 
-    # Kuja / Mangal dosha (full cancellation logic)
-    kuja = _analyze_kuja(ctx)
-    if kuja:
-        doshas.append(kuja)
+    # Kuja / Mangal dosha (full cancellation logic) — skipped when married or age > 40
+    if include_kuja:
+        kuja = _analyze_kuja(ctx)
+        if kuja:
+            doshas.append(kuja)
 
     # Pitru dosha sketch: Sun afflicted + Rahu with Sun or 9th lord weak
     ninth_lord = ctx["lord_of"][9]
@@ -1000,29 +1001,64 @@ def detect_balarishta(chart: dict, ctx: dict, age_years: float) -> List[dict]:
     )]
 
 
-def analyze_chart(chart: dict, native_name: Optional[str] = None) -> dict:
+def analyze_chart(
+    chart: dict,
+    native_name: Optional[str] = None,
+    marital_status: Optional[str] = None,
+) -> dict:
     ctx = _build_context(chart)
     age = _native_age_years(chart)
-    yogas = detect_yogas(chart, ctx)
-    doshas = detect_doshas(chart, ctx)
-    neecha_yogas, neecha_doshas = _analyze_neecha(chart, ctx)
-    yogas.extend(neecha_yogas)
-    doshas.extend(neecha_doshas)
-    balarishta = detect_balarishta(chart, ctx, age)
-    special = _sade_sati_timeline(chart)
+    marital = (marital_status or chart.get("input", {}).get("marital_status") or "unmarried")
+    marital = str(marital).strip().lower()
+    is_married = marital == "married"
+    under_15 = age < 15
+    skip_kuja = is_married or age > 40
 
-    sade_active = [p for p in special if p.get("active_now") and p["phase"] in ("rising", "peak", "setting")]
-    if sade_active:
-        ph = sade_active[0]
-        doshas.append(_item("dosha", "sade_sati", "Sade Sati", True,
-                           f"Saturn {ph['phase']} phase ({ph['start']} to {ph['end']}) relative to natal Moon.",
-                           ["Saturn", "Moon"], ["sade_sati"], "strong"))
-    ashtama = [p for p in special if p.get("active_now") and p["phase"] == "ashtama_shani"]
-    if ashtama:
-        ph = ashtama[0]
-        doshas.append(_item("dosha", "ashtama_shani", "Ashtama Shani", True,
-                           f"Saturn transiting 8th from Moon ({ph['start']} to {ph['end']}).",
-                           ["Saturn"], ["ashtama_shani", "sade_sati"], "moderate"))
+    analysis_notes: List[str] = []
+    if under_15:
+        analysis_notes.append(
+            f"Native is {age:.1f} years old — only Balarishta dosha is assessed under age 15."
+        )
+        yogas: List[dict] = []
+        doshas: List[dict] = []
+        balarishta = detect_balarishta(chart, ctx, age)
+        special: List[dict] = []
+        sade_active: List[dict] = []
+    else:
+        yogas = detect_yogas(chart, ctx)
+        doshas = detect_doshas(chart, ctx, include_kuja=not skip_kuja)
+        if skip_kuja:
+            reason = []
+            if is_married:
+                reason.append("native is married")
+            if age > 40:
+                reason.append(f"age is {age:.1f} (> 40)")
+            analysis_notes.append(
+                "Kuja (Mangal) dosha assessment skipped because " + " and ".join(reason) + "."
+            )
+            doshas.append(_item(
+                "note", "kuja_skipped", "Kuja Dosha not assessed", False,
+                analysis_notes[-1],
+                ["Mars"], [], "info",
+            ))
+        neecha_yogas, neecha_doshas = _analyze_neecha(chart, ctx)
+        yogas.extend(neecha_yogas)
+        doshas.extend(neecha_doshas)
+        balarishta = detect_balarishta(chart, ctx, age)
+        special = _sade_sati_timeline(chart)
+
+        sade_active = [p for p in special if p.get("active_now") and p["phase"] in ("rising", "peak", "setting")]
+        if sade_active:
+            ph = sade_active[0]
+            doshas.append(_item("dosha", "sade_sati", "Sade Sati", True,
+                               f"Saturn {ph['phase']} phase ({ph['start']} to {ph['end']}) relative to natal Moon.",
+                               ["Saturn", "Moon"], ["sade_sati"], "strong"))
+        ashtama = [p for p in special if p.get("active_now") and p["phase"] == "ashtama_shani"]
+        if ashtama:
+            ph = ashtama[0]
+            doshas.append(_item("dosha", "ashtama_shani", "Ashtama Shani", True,
+                               f"Saturn transiting 8th from Moon ({ph['start']} to {ph['end']}).",
+                               ["Saturn"], ["ashtama_shani", "sade_sati"], "moderate"))
 
     sb = _compute_shadbala(chart)
     dasha_now = chart.get("dasha", {})
@@ -1075,7 +1111,10 @@ def analyze_chart(chart: dict, native_name: Optional[str] = None) -> dict:
             "birth": chart["input"]["date"],
             "time": chart["input"]["time"],
             "age_years": round(age, 2),
-            "balarishta_applicable": age < 15,
+            "marital_status": marital,
+            "balarishta_applicable": under_15,
+            "kuja_assessed": (not under_15) and (not skip_kuja),
+            "analysis_scope": "balarishta_only" if under_15 else "full",
         },
         "summary": {
             "yogas_count": sum(1 for y in yogas if y.get("present")),
@@ -1083,6 +1122,7 @@ def analyze_chart(chart: dict, native_name: Optional[str] = None) -> dict:
             "sade_sati_active": bool(sade_active),
             "active_yogas_count": len(active_yogas),
             "active_doshas_count": len(active_doshas),
+            "analysis_notes": analysis_notes,
         },
         "current_dasha": current_dasha,
         "active_now": {

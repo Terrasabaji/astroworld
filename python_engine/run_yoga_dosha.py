@@ -53,10 +53,15 @@ def main():
         if chart.get("error"):
             print(json.dumps(chart))
             return
-        report = analyze_chart(chart, native_name=p.get("name"))
+        report = analyze_chart(
+            chart,
+            native_name=p.get("name"),
+            marital_status=p.get("marital_status"),
+        )
         report["chart_meta"] = {
             "ayanamsa": chart["input"].get("ayanamsa"),
             "place": chart["input"].get("place"),
+            "marital_status": p.get("marital_status"),
         }
         print(json.dumps(report))
     except Exception as e:

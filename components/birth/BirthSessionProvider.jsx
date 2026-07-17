@@ -107,6 +107,7 @@ export function useMarriageBirths() {
   return {
     groom: roles.groom,
     bride: roles.bride,
+    native: roles.native,
     nativeGender: roles.native.gender,
     setGroom,
     setBride,

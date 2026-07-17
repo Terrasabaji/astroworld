@@ -4,11 +4,11 @@ import ModuleIframe from '@/components/modules/ModuleIframe';
 import { useMarriageBirths } from '@/components/birth/BirthSessionProvider';
 
 export default function MarriagePage() {
-  const { groom, bride, hydrated } = useMarriageBirths();
+  const { groom, bride, native, hydrated } = useMarriageBirths();
 
   const getPayload = () => {
     if (!hydrated) return null;
-    return { groom, bride, autoRun: false };
+    return { groom, bride, native, autoRun: false };
   };
 
   return (
