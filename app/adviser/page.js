@@ -200,13 +200,11 @@ function AdviceSection({ advice, isCareer, linked }) {
                 <p className="text-slate-400 text-xs">{r.reason}</p>
                 <ul className="text-slate-500 text-xs mt-1 list-disc pl-4">
                   {(Array.isArray(r.measures)
-                    ? r.measures.map((m, j) => [String(j), m])
+                    ? r.measures.map((m) => [null, m])
                     : Object.entries(r.measures || {})
-                  ).map(([k, m]) => (
-                    <li key={k}>
-                      {Array.isArray(r.measures) ? null : (
-                        <span className="text-slate-400 capitalize">{k}: </span>
-                      )}
+                  ).map(([k, m], j) => (
+                    <li key={k ?? j}>
+                      {k != null && <span className="text-slate-400 capitalize">{k}: </span>}
                       {typeof m === 'string' ? m : JSON.stringify(m)}
                     </li>
                   ))}
@@ -251,13 +249,18 @@ function PeriodsSection({ title, periods }) {
 
 function ShadbalaSection({ data }) {
   if (!data) return null;
-  const rows = data.planets || data.rows || Object.entries(data).filter(([k]) => k !== 'summary').map(([k, v]) => ({ planet: k, ...v }));
+  const source = data.planets || data.rows || data;
+  const rows = Array.isArray(source)
+    ? source
+    : Object.entries(source)
+        .filter(([k]) => k !== 'summary' && k !== 'ranking')
+        .map(([k, v]) => (v && typeof v === 'object' ? { planet: v.planet || k, ...v } : { planet: k, value: v }));
   return (
     <Card className="bg-slate-900/60 border-slate-800">
       <CardHeader className="pb-2"><CardTitle className="text-slate-200 text-sm">Shadbala</CardTitle></CardHeader>
       <CardContent>
         {data.summary && <p className="text-sm text-slate-300 mb-3">{data.summary}</p>}
-        {Array.isArray(rows) && rows.length > 0 && (
+        {rows.length > 0 && (
           <Table>
             <TableHeader>
               <TableRow className="border-slate-800">
@@ -269,7 +272,7 @@ function ShadbalaSection({ data }) {
               {rows.map((r, i) => (
                 <TableRow key={i} className="border-slate-800">
                   <TableCell className="text-slate-200">{r.planet || r.name}</TableCell>
-                  <TableCell className="text-slate-400">{r.total ?? r.score ?? r.value ?? JSON.stringify(r)}</TableCell>
+                  <TableCell className="text-slate-400">{r.total ?? r.rupas ?? r.score ?? r.value ?? '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -282,14 +285,15 @@ function ShadbalaSection({ data }) {
 
 function BhavaSection({ data }) {
   if (!data) return null;
-  const houses = data.houses || data.ranking || [];
+  const source = data.houses || [];
+  const houses = Array.isArray(source) ? source : Object.values(source);
   return (
     <Card className="bg-slate-900/60 border-slate-800">
       <CardHeader className="pb-2"><CardTitle className="text-slate-200 text-sm">Bhava Bala</CardTitle></CardHeader>
       <CardContent className="space-y-1">
-        {(Array.isArray(houses) ? houses : []).map((h, i) => (
+        {houses.map((h, i) => (
           <p key={i} className="text-sm text-slate-300">
-            House {h.house ?? h.number}: {h.strength ?? h.score} — {h.note || h.interpretation || ''}
+            House {h.house ?? h.number}: {h.strength ?? h.rupas ?? h.score} — {h.note || h.interpretation || h.lord || ''}
           </p>
         ))}
         {data.summary && <p className="text-xs text-slate-500 mt-2">{data.summary}</p>}
@@ -299,24 +303,35 @@ function BhavaSection({ data }) {
 }
 
 function PhalaSection({ ranking, timeline }) {
+  // ranking (ishta_ranking) may be an array of strings or of objects.
+  const rankRows = Array.isArray(ranking) ? ranking : [];
+  // timeline (phala_timeline) may be an array or an object of {mahadasha, antardasha} lists.
+  const periods = Array.isArray(timeline)
+    ? timeline
+    : [...(timeline?.mahadasha || []), ...(timeline?.antardasha || [])];
   return (
     <div className="space-y-4">
-      {ranking?.length > 0 && (
+      {rankRows.length > 0 && (
         <Card className="bg-slate-900/60 border-slate-800">
           <CardHeader className="pb-2"><CardTitle className="text-slate-200 text-sm">Ishta Ranking</CardTitle></CardHeader>
           <CardContent className="space-y-1">
-            {ranking.map((r, i) => (
-              <p key={i} className="text-sm text-slate-300">{r.planet || r.name}: {r.score ?? r.ishta}</p>
+            {rankRows.map((r, i) => (
+              <p key={i} className="text-sm text-slate-300">
+                {i + 1}. {typeof r === 'string' ? r : `${r.planet || r.name}: ${r.score ?? r.ishta}`}
+              </p>
             ))}
           </CardContent>
         </Card>
       )}
-      {timeline?.length > 0 && (
+      {periods.length > 0 && (
         <Card className="bg-slate-900/60 border-slate-800">
           <CardHeader className="pb-2"><CardTitle className="text-slate-200 text-sm">Phala Timeline</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {timeline.map((t, i) => (
-              <p key={i} className="text-sm text-slate-300">{t.age ?? t.year}: {t.note ?? t.summary}</p>
+            {periods.map((t, i) => (
+              <p key={i} className="text-sm text-slate-300">
+                {t.lord || t.age || t.year}
+                {t.start && ` (${t.start} → ${t.end})`}: {t.verdict || t.note || t.summary || ''}
+              </p>
             ))}
           </CardContent>
         </Card>

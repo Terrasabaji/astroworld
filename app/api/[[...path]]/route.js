@@ -65,6 +65,35 @@ function pythonErrorResponse(e) {
   return NextResponse.json({ error: e.message }, { status: 500 });
 }
 
+// Wraps a successful python result: engine-reported errors -> 400, else 200.
+function pythonJson(result) {
+  if (result.error) return NextResponse.json(result, { status: 400 });
+  return NextResponse.json(result);
+}
+
+// Authenticates the request, failing closed. Returns { user } on success or
+// { error: <NextResponse> } to return. A thrown auth-configuration error (e.g.
+// AUTH_SECRET unset/default in production) becomes a clean JSON 500 rather than
+// an unhandled rejection; a missing/invalid token becomes a 401.
+function requireAuth(request) {
+  let user;
+  try {
+    user = authenticateRequest(request);
+  } catch {
+    return { error: NextResponse.json({ error: 'Authentication is not configured' }, { status: 500 }) };
+  }
+  if (!user) {
+    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+  }
+  return { user };
+}
+
+// A birth belongs to the caller only when its owner_email matches. Records with
+// no owner_email (legacy/unscoped) are default-denied in authenticated routes.
+function ownsBirth(birth, user) {
+  return birth.owner_email === user.email.toLowerCase().trim();
+}
+
 function normalizeCalculateBody(body) {
   return {
     year: parseInt(body.year),
@@ -102,8 +131,8 @@ export async function GET(request, { params }) {
     }
   }
   if (seg === 'births') {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       return NextResponse.json({ births: await listBirths(user.email) });
     } catch (e) {
@@ -111,11 +140,11 @@ export async function GET(request, { params }) {
     }
   }
   if (parts[0] === 'births' && parts[1]) {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       const birth = await getBirth(parts[1]);
-      if (birth.owner_email && birth.owner_email !== user.email.toLowerCase().trim()) {
+      if (!ownsBirth(birth, user)) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
       return NextResponse.json(birth);
@@ -124,8 +153,8 @@ export async function GET(request, { params }) {
     }
   }
   if (seg === 'auth/me') {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       const profile = await getUser(user.email);
       if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -136,8 +165,8 @@ export async function GET(request, { params }) {
   }
 
   if (seg === 'auth/user-births') {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       const births = await listBirths(user.email);
       return NextResponse.json({ births });
@@ -149,8 +178,7 @@ export async function GET(request, { params }) {
   if (seg === 'muhurta/events') {
     try {
       const result = await runPython(PY_MUHURTA, { op: 'events' });
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -162,8 +190,7 @@ export async function GET(request, { params }) {
       const lon = request.nextUrl.searchParams.get('lon') || '77.5946';
       const tz_offset = request.nextUrl.searchParams.get('tz_offset') || '5.5';
       const result = await runPython(PY_PANCHANGA, { latitude: +lat, longitude: +lon, tz_offset: +tz_offset });
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -238,18 +265,25 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_CALC, normalizeCalculateBody(body));
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
   }
 
   if (seg === 'births') {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       const body = await request.json();
+      // When updating an existing record, only its owner may overwrite it.
+      if (body.id) {
+        let existing = null;
+        try { existing = await getBirth(body.id); } catch { /* new id */ }
+        if (existing && !ownsBirth(existing, user)) {
+          return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
+      }
       const saved = await saveBirth(body, user.email);
       return NextResponse.json(saved);
     } catch (e) {
@@ -261,8 +295,7 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_BTR, { ...body, op: 'rectify' });
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -272,8 +305,7 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_BTR, { ...body, op: 'chart' });
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -283,8 +315,7 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_ADVISER, body);
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -299,8 +330,7 @@ export async function POST(request, { params }) {
         cast_moment: body.cast_moment || undefined,
       };
       const result = await runPython(PY_COMPREHENSIVE, payload);
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -310,8 +340,7 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_MUHURTA, { op: 'search', ...body });
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -321,8 +350,7 @@ export async function POST(request, { params }) {
     try {
       const body = await request.json();
       const result = await runPython(PY_YOGA_DOSHA, normalizeCalculateBody(body));
-      if (result.error) return NextResponse.json(result, { status: 400 });
-      return NextResponse.json(result);
+      return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);
     }
@@ -335,11 +363,11 @@ export async function DELETE(request, { params }) {
   const resolved = (await params) || {};
   const parts = resolved.path || [];
   if (parts[0] === 'births' && parts[1]) {
-    const user = authenticateRequest(request);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user, error } = requireAuth(request);
+    if (error) return error;
     try {
       const birth = await getBirth(parts[1]);
-      if (birth.owner_email && birth.owner_email !== user.email.toLowerCase().trim()) {
+      if (!ownsBirth(birth, user)) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
       }
       return NextResponse.json(await deleteBirth(parts[1]));
