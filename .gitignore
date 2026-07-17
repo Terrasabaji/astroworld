@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Next.js build
+.next/
+out/
+
+# Environment files
+.env.local
+.env*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Zip archives (source already extracted)
+*.zip
+
+# Packaging
+packaging/

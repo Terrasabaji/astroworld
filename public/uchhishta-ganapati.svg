@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <radialGradient id="gaura" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#ffe4a0" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#ff9933" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ff9933" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gbody" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#ffb347"/>
+      <stop offset="50%" stop-color="#ff9933"/>
+      <stop offset="100%" stop-color="#e07800"/>
+    </linearGradient>
+    <linearGradient id="gcrown" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffd700"/>
+      <stop offset="100%" stop-color="#daa520"/>
+    </linearGradient>
+    <linearGradient id="glotus" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff6b9d"/>
+      <stop offset="100%" stop-color="#c0392b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer divine aura -->
+  <circle cx="100" cy="95" r="90" fill="url(#gaura)"/>
+
+  <!-- Lotus pedestal -->
+  <ellipse cx="100" cy="175" rx="45" ry="10" fill="#e07800" opacity="0.3"/>
+  <path d="M55,172 Q60,162 68,170 Q74,160 82,168 Q88,158 95,166 Q100,156 105,166 Q112,158 118,168 Q126,160 132,170 Q140,162 145,172" fill="url(#glotus)" opacity="0.7"/>
+  <path d="M62,176 Q68,168 76,174 Q82,166 90,172 Q96,164 102,172 Q108,164 114,172 Q120,166 128,174 Q134,168 138,176" fill="url(#glotus)" opacity="0.5"/>
+
+  <!-- Seated body - broad belly (Ganapati's characteristic) -->
+  <ellipse cx="100" cy="145" rx="32" ry="22" fill="url(#gbody)"/>
+  <!-- Torso -->
+  <ellipse cx="100" cy="110" rx="24" ry="30" fill="url(#gbody)"/>
+
+  <!-- Dhoti/cloth wrap -->
+  <path d="M72,140 Q80,155 100,160 Q120,155 128,140" fill="#fff3cd" opacity="0.4" stroke="#daa520" stroke-width="0.5"/>
+
+  <!-- Sacred thread (yajnopavita) -->
+  <path d="M82,90 Q90,105 85,130 Q82,145 80,155" fill="none" stroke="#ffd700" stroke-width="1.5" opacity="0.7"/>
+
+  <!-- Left arms (upper and lower) -->
+  <!-- Upper left arm - holding noose (pasha) -->
+  <path d="M78,100 Q60,88 50,75 Q45,68 42,60" fill="none" stroke="url(#gbody)" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="40" cy="57" r="3" fill="none" stroke="#ffd700" stroke-width="1.5"/>
+  <path d="M37,57 Q35,50 40,48 Q45,50 43,57" fill="none" stroke="#ffd700" stroke-width="1.5"/>
+
+  <!-- Lower left arm - holding broken tusk -->
+  <path d="M76,115 Q58,120 45,125 Q38,128 32,130" fill="none" stroke="url(#gbody)" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M30,128 L26,138 L32,132" fill="#fffff0" stroke="#daa520" stroke-width="0.8"/>
+
+  <!-- Right arms (upper and lower) -->
+  <!-- Upper right arm - holding goad (ankusha) -->
+  <path d="M122,100 Q140,88 150,75 Q155,68 158,60" fill="none" stroke="url(#gbody)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M156,58 Q160,52 164,55 Q162,60 158,62" fill="none" stroke="#ffd700" stroke-width="2" stroke-linecap="round"/>
+  <line x1="158" y1="60" x2="155" y2="72" stroke="#ffd700" stroke-width="1.5"/>
+
+  <!-- Lower right arm - blessing (abhaya mudra) -->
+  <path d="M124,115 Q142,118 155,115 Q162,112 168,108" fill="none" stroke="url(#gbody)" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Open palm -->
+  <ellipse cx="170" cy="106" rx="5" ry="7" fill="url(#gbody)"/>
+  <path d="M167,100 L167,97 M169,99 L169,96 M171,99 L171,96 M173,100 L173,97" stroke="url(#gbody)" stroke-width="1.2" stroke-linecap="round"/>
+
+  <!-- Head - elephant head -->
+  <ellipse cx="100" cy="62" rx="22" ry="24" fill="url(#gbody)"/>
+
+  <!-- Left ear - large fan-shaped -->
+  <path d="M78,62 Q60,45 55,60 Q52,72 60,80 Q68,85 78,78" fill="url(#gbody)" stroke="#e07800" stroke-width="1"/>
+  <path d="M76,62 Q63,50 60,62 Q58,72 64,77 Q70,80 76,75" fill="#ffcc80" opacity="0.3"/>
+
+  <!-- Right ear - large fan-shaped -->
+  <path d="M122,62 Q140,45 145,60 Q148,72 140,80 Q132,85 122,78" fill="url(#gbody)" stroke="#e07800" stroke-width="1"/>
+  <path d="M124,62 Q137,50 140,62 Q142,72 136,77 Q130,80 124,75" fill="#ffcc80" opacity="0.3"/>
+
+  <!-- Crown (mukuta) -->
+  <path d="M82,45 L86,30 L92,42 L96,28 L100,40 L104,28 L108,42 L114,30 L118,45" fill="url(#gcrown)" stroke="#b8860b" stroke-width="0.5"/>
+  <circle cx="100" cy="32" r="3" fill="#ff0000" opacity="0.8"/>
+  <circle cx="90" cy="36" r="2" fill="#00ff00" opacity="0.6"/>
+  <circle cx="110" cy="36" r="2" fill="#0066ff" opacity="0.6"/>
+
+  <!-- Eyes - gentle, wise -->
+  <ellipse cx="90" cy="58" rx="4" ry="3" fill="#fff8e1"/>
+  <ellipse cx="90" cy="58" rx="2.5" ry="2.5" fill="#1a1a2e"/>
+  <circle cx="89" cy="57" r="0.8" fill="white"/>
+  <ellipse cx="110" cy="58" rx="4" ry="3" fill="#fff8e1"/>
+  <ellipse cx="110" cy="58" rx="2.5" ry="2.5" fill="#1a1a2e"/>
+  <circle cx="109" cy="57" r="0.8" fill="white"/>
+
+  <!-- Third eye (tilak) -->
+  <ellipse cx="100" cy="50" rx="1.5" ry="2" fill="#ff0000" opacity="0.7"/>
+  <path d="M96,50 L100,47 L104,50" fill="none" stroke="#ffd700" stroke-width="0.8"/>
+
+  <!-- Trunk - curving to the left, holding modak -->
+  <path d="M98,68 Q94,76 90,84 Q86,92 82,98 Q78,104 76,108 Q74,112 76,114 Q78,115 80,113 Q82,110 84,106" fill="none" stroke="url(#gbody)" stroke-width="5" stroke-linecap="round"/>
+  <!-- Modak (sweet) in trunk -->
+  <circle cx="84" cy="104" r="4" fill="#fff3cd" stroke="#daa520" stroke-width="0.8"/>
+  <path d="M81,103 Q84,100 87,103" fill="none" stroke="#daa520" stroke-width="0.5"/>
+
+  <!-- Tusk (right side, single visible tusk) -->
+  <path d="M106,72 Q108,78 107,82" fill="none" stroke="#fffff0" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Necklace -->
+  <path d="M80,88 Q90,94 100,95 Q110,94 120,88" fill="none" stroke="#ffd700" stroke-width="1.5"/>
+  <circle cx="88" cy="92" r="2" fill="#ff0000" opacity="0.6"/>
+  <circle cx="100" cy="95" r="2.5" fill="#ffd700"/>
+  <circle cx="112" cy="92" r="2" fill="#ff0000" opacity="0.6"/>
+
+  <!-- Belly button with Om symbol suggestion -->
+  <circle cx="100" cy="135" r="2" fill="#e07800"/>
+
+  <!-- Mouse (vahana) at bottom right -->
+  <ellipse cx="140" cy="172" rx="8" ry="5" fill="#8B7355"/>
+  <circle cx="146" cy="169" r="3" fill="#8B7355"/>
+  <circle cx="148" cy="168" r="1" fill="#1a1a2e"/>
+  <path d="M148,170 Q150,171 149,172" fill="none" stroke="#8B7355" stroke-width="0.8"/>
+  <path d="M132,172 Q128,170 125,172" fill="none" stroke="#8B7355" stroke-width="1" stroke-linecap="round"/>
+  <ellipse cx="144" cy="166" rx="3" ry="4" fill="#a0896b" opacity="0.7"/>
+
+  <!-- Decorative border -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#ff9933" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.4"/>
+</svg>

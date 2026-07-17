@@ -1,0 +1,22 @@
+{
+  "id": "0dbd5b10-8716-4354-a890-3ecfcab1a1b3",
+  "name": "Native",
+  "gender": "male",
+  "place": "Tirthahalli, IN",
+  "year": 1971,
+  "month": 3,
+  "day": 3,
+  "hour": 14,
+  "minute": 53,
+  "second": 0,
+  "latitude": 13.68833,
+  "longitude": 75.24556,
+  "tz_offset": 5.5,
+  "tz_name": "Asia/Kolkata",
+  "ayanamsa": "lahiri",
+  "house_system": "P",
+  "notes": "",
+  "tags": [],
+  "created_at": "2026-07-13T17:12:48.574Z",
+  "updated_at": "2026-07-13T17:12:48.574Z"
+}

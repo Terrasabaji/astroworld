@@ -1,0 +1,10 @@
+{
+  "name": "Test User",
+  "mobile": "9999999999",
+  "email": "test@test.com",
+  "otp": null,
+  "otp_created_at": null,
+  "registered_at": "2026-07-16T18:00:15.640Z",
+  "updated_at": "2026-07-16T18:00:15.640Z",
+  "last_login": "2026-07-16T18:00:19.257Z"
+}
