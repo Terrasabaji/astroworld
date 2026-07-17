@@ -349,7 +349,11 @@ export async function POST(request, { params }) {
   if (seg === 'yoga-dosha/analyze') {
     try {
       const body = await request.json();
-      const result = await runPython(PY_YOGA_DOSHA, normalizeCalculateBody(body));
+      const result = await runPython(PY_YOGA_DOSHA, {
+        ...normalizeCalculateBody(body),
+        name: body.name || undefined,
+        marital_status: body.marital_status || undefined,
+      });
       return pythonJson(result);
     } catch (e) {
       return pythonErrorResponse(e);

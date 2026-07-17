@@ -18,7 +18,13 @@ import NorthIndianChart from '@/components/astrology/NorthIndianChart';
 import { birthFormToPayload } from '@/components/birth/BirthForm';
 import OpenBirthDialog, { OpenBirthButton } from '@/components/birth/OpenBirthDialog';
 import { useBirthSession } from '@/components/birth/BirthSessionProvider';
-import { nativeBirth, GENDER_OPTIONS, normalizeGender } from '@/lib/birth-session';
+import {
+  nativeBirth,
+  GENDER_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  normalizeGender,
+  normalizeMaritalStatus,
+} from '@/lib/birth-session';
 import { authHeaders } from '@/lib/api-client';
 
 // Country code -> readable name via browser's Intl.DisplayNames (no data shipped)
@@ -244,7 +250,7 @@ export default function Home() {
             <CardDescription>Enter native&apos;s exact particulars</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <Label className="text-slate-300">Name</Label>
                 <Input value={form.name || ''} onChange={update('name')} placeholder="Native" className="mt-1.5" />
@@ -261,6 +267,22 @@ export default function Home() {
                   <SelectContent>
                     {GENDER_OPTIONS.map((g) => (
                       <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-slate-300">Marital status</Label>
+                <Select
+                  value={normalizeMaritalStatus(form.marital_status)}
+                  onValueChange={(marital_status) => update('marital_status')(marital_status)}
+                >
+                  <SelectTrigger className="mt-1.5 bg-slate-900 border-slate-700 text-slate-100">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MARITAL_STATUS_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
