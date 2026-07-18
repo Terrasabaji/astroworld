@@ -7,6 +7,9 @@ import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from astro_adviser.adviser import BirthData, build_report, report_to_dict
 
 

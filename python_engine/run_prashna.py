@@ -7,6 +7,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from prashna import run_prashna_analysis
 
 

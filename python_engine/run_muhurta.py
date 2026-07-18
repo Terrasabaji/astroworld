@@ -3,6 +3,9 @@
 import json
 import sys
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from muhurta_engine import list_events, search_muhurtas
 
 

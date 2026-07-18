@@ -4,6 +4,9 @@ import json
 import sys
 import datetime
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 import swisseph as swe
 
 import calculate as calc

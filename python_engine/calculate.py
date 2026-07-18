@@ -18,6 +18,10 @@ import sys
 import os
 import json
 import datetime
+
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 import swisseph as swe
 try:
     import pytz

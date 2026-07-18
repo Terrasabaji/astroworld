@@ -7,6 +7,9 @@ import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from btr.api import chart_report, make_birth_moment, rectify
 from btr.core.constants import Ayanamsa, HouseSystem
 from btr.core.ephemeris import Ephemeris

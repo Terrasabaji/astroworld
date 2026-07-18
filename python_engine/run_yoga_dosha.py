@@ -7,6 +7,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from yoga_dosha_analysis import analyze_chart
 
 CALC = os.path.join(os.path.dirname(__file__), "calculate.py")
