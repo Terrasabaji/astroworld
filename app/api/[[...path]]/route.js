@@ -25,6 +25,15 @@ function resolvePythonExecutable() {
   if (process.env.SIDDHANTA_PYTHON) {
     return process.env.SIDDHANTA_PYTHON;
   }
+  // Prefer the engine venv so pyswisseph/pytz resolve without a global install.
+  const venvUnix = path.join(process.cwd(), 'python_engine', '.venv', 'bin', 'python');
+  const venvWin = path.join(process.cwd(), 'python_engine', '.venv', 'Scripts', 'python.exe');
+  if (process.platform === 'win32' && fs.existsSync(venvWin)) {
+    return venvWin;
+  }
+  if (fs.existsSync(venvUnix)) {
+    return venvUnix;
+  }
   const bundled = path.join(process.cwd(), 'runtime', 'python', 'python.exe');
   if (process.platform === 'win32' && fs.existsSync(bundled)) {
     return bundled;
