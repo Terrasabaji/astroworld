@@ -1,0 +1,43 @@
+# Astro World — local / team cloud preview
+# Usage:
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# Optional: set AUTH_SECRET in a .env file next to this compose file.
+
+services:
+  web:
+    build: .
+    image: astroworld:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NODE_ENV: production
+      ASTRO_WORLD_PYTHON: /app/python_engine/.venv/bin/python
+      # Demo-friendly defaults for team testing (override in production)
+      AUTH_BYPASS_OTP: "${AUTH_BYPASS_OTP:-true}"
+      AUTH_SECRET: "${AUTH_SECRET:-astroworld-team-demo-change-me}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+    volumes:
+      # Persist births / users across restarts during team testing
+      - astroworld-data:/app/data/users
+      - astroworld-births:/app/data/births
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  astroworld-data:
+  astroworld-births:

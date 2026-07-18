@@ -1,0 +1,11 @@
+{
+  "name": "Astro World Cloud",
+  "install": "npm install && python3 -m venv python_engine/.venv && python_engine/.venv/bin/pip install -r python_engine/requirements.txt && node scripts/seed-data.mjs",
+  "start": "export ASTRO_WORLD_PYTHON=\"$(pwd)/python_engine/.venv/bin/python\" AUTH_BYPASS_OTP=true && npm run dev",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "export ASTRO_WORLD_PYTHON=\"$(pwd)/python_engine/.venv/bin/python\" AUTH_BYPASS_OTP=true && npm run dev"
+    }
+  ]
+}

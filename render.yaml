@@ -1,0 +1,28 @@
+# Render Blueprint — one-click cloud host for team access & testing
+# https://dashboard.render.com/blueprints
+#
+# Deploy: connect this repo in Render → New Blueprint Instance → select render.yaml
+# Public URL will look like: https://astroworld-xxxx.onrender.com
+
+services:
+  - type: web
+    name: astroworld
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_BYPASS_OTP
+        value: "true"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ASTRO_WORLD_PYTHON
+        value: /app/python_engine/.venv/bin/python
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: ASTRO_WORLD_PYTHON_TIMEOUT_MS
+        value: "90000"
