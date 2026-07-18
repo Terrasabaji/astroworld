@@ -8,6 +8,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import venv_bootstrap
+venv_bootstrap.ensure_project_venv()
+
 from comprehensive_status import build_comprehensive_report
 
 CALC = os.path.join(os.path.dirname(__file__), "calculate.py")

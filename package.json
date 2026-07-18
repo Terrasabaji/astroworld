@@ -10,6 +10,8 @@
         "start": "next start",
         "start:standalone": "node scripts/start-standalone.js",
         "build:windows": "bash packaging/windows/build-release.sh",
+        "setup:python": "node scripts/setup-python.mjs",
+        "postinstall": "node scripts/setup-python.mjs",
         "test": "node tests/auth.test.mjs"
     },
     "engines": {

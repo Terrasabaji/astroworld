@@ -25,6 +25,13 @@ function resolvePythonExecutable() {
   if (process.env.SIDDHANTA_PYTHON) {
     return process.env.SIDDHANTA_PYTHON;
   }
+  // Prefer the project virtualenv (where pyswisseph / pytz are installed).
+  const venvPython = process.platform === 'win32'
+    ? path.join(process.cwd(), 'python_engine', '.venv', 'Scripts', 'python.exe')
+    : path.join(process.cwd(), 'python_engine', '.venv', 'bin', 'python');
+  if (fs.existsSync(venvPython)) {
+    return venvPython;
+  }
   const bundled = path.join(process.cwd(), 'runtime', 'python', 'python.exe');
   if (process.platform === 'win32' && fs.existsSync(bundled)) {
     return bundled;

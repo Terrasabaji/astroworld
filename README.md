@@ -22,7 +22,12 @@ yarn install
 
 ### 2. Set up the Python engine
 
+`npm install` / `yarn install` also runs `npm run setup:python`, which creates
+`python_engine/.venv` and installs requirements. To set it up manually:
+
 ```bash
+npm run setup:python
+# or:
 cd python_engine
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
@@ -32,7 +37,7 @@ cd ..
 
 Python dependencies:
 
-- `pyswisseph` — Swiss Ephemeris bindings (planetary calculations)
+- `pyswisseph` — Swiss Ephemeris bindings (planetary calculations; import name `swisseph`)
 - `pytz` — timezone handling
 
 Ephemeris data files ship in the [`ephe/`](ephe/) folder, so no extra download is needed.
@@ -54,21 +59,18 @@ fixed OTP of `123456` (with `AUTH_BYPASS_OTP=true` any OTP is accepted in dev).
 
 ## Running the app (development)
 
-The Next.js API spawns Python for calculations. Point it at the interpreter that has
-the dependencies installed using the `ASTRO_WORLD_PYTHON` environment variable
-(falls back to `SIDDHANTA_PYTHON`, then the system `python3` / `python`):
+The Next.js API spawns Python for calculations. Resolution order:
+`ASTRO_WORLD_PYTHON` → `SIDDHANTA_PYTHON` → `python_engine/.venv` (if present) →
+system `python3` / `python`.
 
 ```bash
-# use the venv you created above
+# optional override; usually unnecessary once setup:python has run
 export ASTRO_WORLD_PYTHON="$(pwd)/python_engine/.venv/bin/python"   # Windows: set ASTRO_WORLD_PYTHON=...\python_engine\.venv\Scripts\python.exe
 
 npm run dev
 ```
 
 Open http://localhost:3000.
-
-If `ASTRO_WORLD_PYTHON` is unset, the app uses `python3` (macOS/Linux) or `python`
-(Windows) from your `PATH` — make sure `pyswisseph` and `pytz` are installed there.
 
 ## Production build
 
