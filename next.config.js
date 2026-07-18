@@ -1,5 +1,22 @@
 const nextConfig = {
   output: 'standalone',
+  // Bundle the Python engine, ephemeris data, and seed fixtures into the
+  // standalone server output so cloud/Docker hosts can calculate charts.
+  outputFileTracingIncludes: {
+    '/api/**': [
+      './python_engine/**/*',
+      './ephe/**/*',
+      './data/seed/**/*',
+      './data/users/.gitkeep',
+      './data/births/.gitkeep',
+    ],
+  },
+  outputFileTracingExcludes: {
+    '/api/**': [
+      './python_engine/.venv/**/*',
+      './python_engine/**/__pycache__/**/*',
+    ],
+  },
   images: {
     unoptimized: true,
     remotePatterns: [

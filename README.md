@@ -75,7 +75,19 @@ If `ASTRO_WORLD_PYTHON` is unset, the app uses `python3` (macOS/Linux) or `pytho
 ```bash
 npm run build
 npm run start
+# or, after build, the standalone server (bundles static + Python paths):
+npm run start:standalone
 ```
+
+## Cloud hosting (team access & testing)
+
+The app needs Node + Python together, so cloud demos use Docker.
+
+- **One-click public host:** connect this repo to [Render Blueprints](https://dashboard.render.com/blueprints) using [`render.yaml`](render.yaml).
+- **Any machine / VM:** `docker compose up --build` → http://localhost:3000
+- **Prebuilt image (after CI on `main`):** `docker pull ghcr.io/terrasabaji/astroworld:latest`
+
+Full steps, env vars, and Cursor Cloud notes: [`docs/CLOUD_HOSTING.md`](docs/CLOUD_HOSTING.md).
 
 ## Windows packaging
 

@@ -10,6 +10,8 @@
         "start": "next start",
         "start:standalone": "node scripts/start-standalone.js",
         "build:windows": "bash packaging/windows/build-release.sh",
+        "docker:build": "docker build -t astroworld:latest .",
+        "docker:up": "docker compose up --build",
         "test": "node tests/auth.test.mjs"
     },
     "engines": {
