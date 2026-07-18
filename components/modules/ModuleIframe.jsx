@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Printer } from 'lucide-react';
 import AstroWorldLogo from '@/components/layout/AstroWorldLogo';
 import DeveloperCredit from '@/components/layout/DeveloperCredit';
 import { APP_NAME } from '@/lib/branding';
@@ -52,10 +52,26 @@ export default function ModuleIframe({
             {description && <p className="text-slate-400 text-sm mt-1">{description}</p>}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2 flex-wrap print:hidden">
           <Button type="button" variant="outline" size="sm" className="border-slate-600 text-slate-300" onClick={postBirth}>
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
             Sync from Chart Engine
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-300"
+            onClick={() => {
+              try {
+                iframeRef.current?.contentWindow?.print();
+              } catch {
+                /* cross-origin or unloaded */
+              }
+            }}
+          >
+            <Printer className="h-3.5 w-3.5 mr-1.5" />
+            Print
           </Button>
           <span className="text-xs text-slate-500">Full module UI — all analysis tabs and reports</span>
         </div>

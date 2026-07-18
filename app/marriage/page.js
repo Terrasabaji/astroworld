@@ -8,7 +8,7 @@ export default function MarriagePage() {
 
   const getPayload = () => {
     if (!hydrated) return null;
-    return { groom, bride, native, autoRun: false };
+    return { groom, bride, native, autoRun: true };
   };
 
   return (

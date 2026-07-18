@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Printer } from 'lucide-react';
 import { useModuleBirth } from '@/components/birth/BirthSessionProvider';
 import PlaceAutocomplete from '@/components/birth/PlaceAutocomplete';
 import { nativeBirth } from '@/lib/birth-session';
+import { printPrashnaReport } from '@/lib/prashna-print';
 
 const CATEGORIES = [
   { value: 'auto', label: 'Auto-detect from question' },
@@ -155,12 +156,25 @@ export default function PrashnaPage() {
 
   return (
     <main className="container py-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100">Prashna (Horary)</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Exactly two types — <span className="text-saffron-300">Mooka</span> (silent) and{' '}
-          <span className="text-saffron-300">Manual</span> (explicit question). KP promise + Parashara context via Swiss Ephemeris.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">Prashna (Horary)</h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Exactly two types — <span className="text-saffron-300">Mooka</span> (silent) and{' '}
+            <span className="text-saffron-300">Manual</span> (explicit question). KP promise + Parashara context via Swiss Ephemeris.
+          </p>
+        </div>
+        {report && (
+          <Button
+            type="button"
+            variant="outline"
+            className="border-slate-600 text-slate-200 hover:bg-slate-800 print:hidden"
+            onClick={() => printPrashnaReport(report)}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
+        )}
       </div>
 
       <Tabs

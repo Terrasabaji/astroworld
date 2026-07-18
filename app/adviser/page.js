@@ -1,72 +1,130 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Printer, Sparkles } from 'lucide-react';
 import AstroWorldLogo from '@/components/layout/AstroWorldLogo';
 import { APP_NAME } from '@/lib/branding';
-import BirthForm, { birthFormToPayload } from '@/components/birth/BirthForm';
-import BirthSelector from '@/components/birth/BirthSelector';
-import { useModuleBirth } from '@/components/birth/BirthSessionProvider';
+import { birthFormToPayload } from '@/components/birth/BirthForm';
+import { useBirthSession } from '@/components/birth/BirthSessionProvider';
+import OpenBirthDialog, { OpenBirthButton } from '@/components/birth/OpenBirthDialog';
+import { printAdviserReport } from '@/lib/adviser-print';
+
+function pad2(n) {
+  return String(n ?? 0).padStart(2, '0');
+}
 
 export default function AdviserPage() {
-  const { birth: form, setBirth: setForm } = useModuleBirth();
+  const { birth, hydrated, setBirth } = useBirthSession();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [openBirth, setOpenBirth] = useState(false);
 
-  const runAdviser = async () => {
+  const runAdviser = useCallback(async () => {
+    if (!hydrated || !birth?.latitude) return;
     setLoading(true);
+    setError('');
     setReport(null);
     try {
-      const b = birthFormToPayload(form);
+      const b = birthFormToPayload(birth);
       const payload = {
         birth: {
-          name: b.name || form.name,
-          year: b.year, month: b.month, day: b.day,
-          time: `${String(b.hour).padStart(2, '0')}:${String(b.minute).padStart(2, '0')}`,
-          latitude: b.latitude, longitude: b.longitude,
-          tz: b.tz_offset, place: b.place,
+          name: b.name || birth.name,
+          year: b.year,
+          month: b.month,
+          day: b.day,
+          time: `${pad2(b.hour)}:${pad2(b.minute)}`,
+          latitude: b.latitude,
+          longitude: b.longitude,
+          tz: b.tz_offset,
+          place: b.place,
         },
       };
       const res = await fetch('/api/adviser/report', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setReport(data);
     } catch (e) {
-      alert(e.message);
-    } finally { setLoading(false); }
-  };
+      setError(e.message || 'Analysis failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [birth, hydrated]);
+
+  useEffect(() => {
+    if (hydrated && birth?.latitude) runAdviser();
+  }, [hydrated, birth?.latitude, birth?.longitude, birth?.year, birth?.month, birth?.day, birth?.hour, birth?.minute, runAdviser]);
+
+  const birthLine = birth
+    ? `${birth.name || 'Native'} · ${pad2(birth.day)}/${pad2(birth.month)}/${birth.year} ${pad2(birth.hour)}:${pad2(birth.minute)}${birth.place ? ` · ${birth.place}` : ''}`
+    : '';
 
   return (
     <div className="container py-6 space-y-6">
-      <div className="flex items-start gap-3">
-        <AstroWorldLogo size={32} showName={false} className="mt-1" />
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-amber-500/80 font-medium">{APP_NAME}</p>
-          <h1 className="text-2xl font-bold text-slate-100">Education &amp; Career Adviser</h1>
-          <p className="text-slate-400 text-sm mt-1">Full KP + Parashara education and career analysis from the original adviser engine.</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          <AstroWorldLogo size={32} showName={false} className="mt-1" />
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-amber-500/80 font-medium">{APP_NAME}</p>
+            <h1 className="text-2xl font-bold text-slate-100">Education &amp; Career Adviser</h1>
+            {birthLine && <p className="text-sky-300/90 text-sm mt-0.5">{birthLine}</p>}
+            <p className="text-slate-400 text-sm mt-1">
+              Full KP + Parashara education and career analysis using birth details from the Chart Engine landing page.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2 print:hidden flex-wrap">
+          <OpenBirthButton onClick={() => setOpenBirth(true)} />
+          {report && (
+            <Button
+              variant="outline"
+              onClick={() => printAdviserReport(report)}
+              className="border-slate-600 text-slate-200 hover:bg-slate-800"
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+          )}
+          <Button onClick={runAdviser} disabled={loading || !hydrated || !birth?.latitude} className="bg-amber-600 hover:bg-amber-500">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+            {loading ? 'Analyzing…' : 'Re-run'}
+          </Button>
         </div>
       </div>
 
-      <Card className="bg-slate-900/60 border-slate-800">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-slate-200 text-sm">Birth Details</CardTitle>
-          <BirthSelector onSelect={setForm} />
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <BirthForm value={form} onChange={setForm} showGender />
-          <Button onClick={runAdviser} disabled={loading} className="bg-amber-600 hover:bg-amber-500">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            Generate Full Report
-          </Button>
-        </CardContent>
-      </Card>
+      <OpenBirthDialog open={openBirth} onOpenChange={setOpenBirth} onOpen={setBirth} />
+
+      {!hydrated || loading ? (
+        <Card className="bg-slate-900/60 border-slate-800">
+          <CardContent className="py-12 flex flex-col items-center text-slate-400">
+            <Loader2 className="h-8 w-8 animate-spin text-amber-400 mb-3" />
+            <p>Running education &amp; career analysis…</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {error && (
+        <Card className="bg-slate-900/60 border-rose-900/50">
+          <CardContent className="py-4 text-rose-400 text-sm">{error}</CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && !birth?.latitude && (
+        <Card className="bg-slate-900/60 border-slate-800">
+          <CardContent className="py-6 text-slate-400 text-sm">
+            No birth coordinates in session. Return to the landing page, enter birth details, and press Run — then open this module.
+          </CardContent>
+        </Card>
+      )}
 
       {report && (
         <>
@@ -303,9 +361,7 @@ function BhavaSection({ data }) {
 }
 
 function PhalaSection({ ranking, timeline }) {
-  // ranking (ishta_ranking) may be an array of strings or of objects.
   const rankRows = Array.isArray(ranking) ? ranking : [];
-  // timeline (phala_timeline) may be an array or an object of {mahadasha, antardasha} lists.
   const periods = Array.isArray(timeline)
     ? timeline
     : [...(timeline?.mahadasha || []), ...(timeline?.antardasha || [])];

@@ -387,6 +387,29 @@ function downloadHTML() {
 }
 
 /**
+ * Open browser print dialog (Save as PDF or printer) for the HTML report.
+ */
+function printReport() {
+    if (!lastRectificationData) {
+        alert("No data to print. Run rectification first.");
+        return;
+    }
+    const html = generateHTMLReport(lastRectificationData);
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) {
+        window.print();
+        return;
+    }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.onload = function () {
+        w.print();
+        w.onafterprint = function () { w.close(); };
+    };
+}
+
+/**
  * Download PDF report
  */
 function downloadPDF() {

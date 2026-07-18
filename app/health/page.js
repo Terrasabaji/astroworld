@@ -9,7 +9,7 @@ export default function HealthPage() {
 
   const getPayload = () => {
     if (!hydrated) return null;
-    return { native: nativeBirth(birth), autoRun: false };
+    return { native: nativeBirth(birth), autoRun: true };
   };
 
   return (
